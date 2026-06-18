@@ -208,6 +208,8 @@ function Combat.updateMissiles(state, Core, dt)
         m.life = m.life - dt
         if m.life <= 0 then
             Core.spawnExplosion(state, m.x, m.y, { 255, 150, 50 }, 8, 120)
+            -- Phase 6.1: 导弹爆炸震动
+            Core.shake(state, 3, 0.2)
             table.remove(state.missiles, i)
         else
             -- 追踪目标

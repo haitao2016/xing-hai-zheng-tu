@@ -481,6 +481,29 @@ function Core.update(state, dt, inputState)
     state.cam.x = lerp(state.cam.x, camTargetX, dt * camSpeed) + (state.shakeOffX or 0)
     state.cam.y = lerp(state.cam.y, camTargetY, dt * camSpeed) + (state.shakeOffY or 0)
 
+    -- Phase 9.1: 动态BGM系统 - 根据战斗状态切换BGM
+    state._bgmCheckTimer = (state._bgmCheckTimer or 0) + dt
+    if state._bgmCheckTimer >= 0.5 then
+        state._bgmCheckTimer = 0
+        local targetBGM = "cruise"  -- 默认巡航BGM
+        local enemyCount = #state.enemies
+        local bossCount = 0
+        for _, e in ipairs(state.enemies) do
+            if e.isBoss then bossCount = bossCount + 1 end
+        end
+        local combatIntensity = enemyCount + bossCount * 3  -- Boss权重更高
+        if bossCount > 0 then
+            targetBGM = "boss"
+        elseif combatIntensity >= 6 then
+            targetBGM = "battle"
+        else
+            targetBGM = "cruise"
+        end
+        -- 调用Audio系统切换BGM
+        local Audio = require("game.Audio")
+        Audio.setBGM(targetBGM)
+    end
+
     -- 玩家死亡
     if state.player.hp <= 0 then
         state.seasonOver = true

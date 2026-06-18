@@ -289,7 +289,13 @@ function PlayerCtrl.damagePlayer(state, Core, rawDmg, srcX, srcY)
         shakeDirX = p.x - srcX
         shakeDirY = p.y - srcY
     end
-    Core.shake(state, 3, 0.15, shakeDirX, shakeDirY)
+    -- Phase 6.1: 大额伤害增强震动
+    local shakeIntensity, shakeDuration = 3, 0.15
+    if dmg > 30 then
+        shakeIntensity = 4
+        shakeDuration = 0.3
+    end
+    Core.shake(state, shakeIntensity, shakeDuration, shakeDirX, shakeDirY)
     -- 飘字
     Core.addFloatingText(state, p.x, p.y - 20, string.format("-%d", math.floor(dmg)), { 255, 80, 80 })
 end

@@ -66,6 +66,8 @@ function EnemyAI.spawnBoss(state, Core, bossId)
     table.insert(state.enemies, e)
     Core.addToast(state, "⚠ Boss: " .. def.name, def.color)
     Audio.playBossAlarm()
+    -- Phase 6.1: Boss出场震动
+    Core.shake(state, 6, 0.8)
 end
 
 -- ============================================================================
