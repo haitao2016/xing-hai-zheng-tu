@@ -1,0 +1,44 @@
+{
+  "$schema": "../schemas/settings.schema.json",
+  "sources": {
+    "engine": {
+      "tag": "stable"
+    },
+    "engine-res": {
+      "tag": "stable"
+    },
+    "official-res": {
+      "tag": "stable"
+    }
+  },
+  "build": {
+    "generate_fs_path": true,
+    "output_dir": "../dist",
+    "asset_dirs": [
+      "../assets",
+      "../scripts"
+    ],
+    "asset_ignores": []
+  },
+  "@runtime": {
+    "multiplayer": {
+      "enabled": false
+    },
+    "ad": {
+      "status": 0,
+      "url": "https://developer.taptap.cn/forge/385689/app/868760/operation/ad-monetization",
+      "ad_spaces": [
+        {
+          "id": "1054323",
+          "type": 1
+        },
+        {
+          "id": "1054324",
+          "type": 2
+        }
+      ],
+      "top_on_placements": [],
+      "synced_at": "2026-06-09T08:47:01.470Z"
+    }
+  }
+}

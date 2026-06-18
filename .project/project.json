@@ -1,0 +1,50 @@
+{
+  "$schema": "../schemas/project.schema.json",
+  "project_id": "p_tdhd",
+  "author": {
+    "id": "1259204981"
+  },
+  "entry": "main.lua",
+  "version": "1.0.8",
+  "taptap_publish": {
+    "title": "星海征途",
+    "description": "驾驶飞船探索浩瀚星海，选择阵营、解锁科技树、击败Boss，体验太空射击与策略探索的完美融合。支持每日挑战和无尽模式。",
+    "category": "action",
+    "screen_orientation": "landscape",
+    "collection_type": "sce",
+    "trial_note": "一款融合射击与探索的太空冒险游戏，希望你能享受星际旅途中的每一次战斗与发现！",
+    "app_platforms": "1,2",
+    "developer_id": 385689,
+    "app_id": 868760,
+    "miniapp_id": "tapmcq7dxar80iusni",
+    "gameplay_demo_video_source": "https://tapcode-sce.spark.xd.com/videos/p_tdhd/1781703324703-rec_17674169-9d2e-4669-a9b3-8a418881b41f.mp4"
+  },
+  "assets": {
+    "icon": "./game_material/ICON_2026-06-17T13-09-36_01.jpg",
+    "screenshots": [
+      "./game_material/SCREENSHOT_2026-06-17T13-09-36_01.jpg",
+      "./game_material/SCREENSHOT_2026-06-17T13-09-36_02.jpg",
+      "./game_material/SCREENSHOT_2026-06-17T13-09-36_03.jpg"
+    ],
+    "promotional_image": "./game_material/PROMO_final_banner.jpg",
+    "icon_url": "https://tapcode-sce.spark.xd.com/assets/game_material/星海征途/ICON_2026-06-17T13-09-36_01.jpg",
+    "screenshot_urls": [
+      "https://tapcode-sce.spark.xd.com/assets/game_material/星海征途/SCREENSHOT_2026-06-17T13-09-36_01.jpg",
+      "https://tapcode-sce.spark.xd.com/assets/game_material/星海征途/SCREENSHOT_2026-06-17T13-09-36_02.jpg",
+      "https://tapcode-sce.spark.xd.com/assets/game_material/星海征途/SCREENSHOT_2026-06-17T13-09-36_03.jpg"
+    ],
+    "promotional_image_url": "https://tapcode-sce.spark.xd.com/assets/game_material/p_tdhd/PROMO_final_banner.jpg",
+    "cover_vertical": "./.project/game_material/COVER_VERTICAL_2026-06-17T13-16-11_01.png",
+    "cover_vertical_url": "https://tapcode-sce.spark.xd.com/assets/game_material/星海征途/COVER_VERTICAL_2026-06-17T13-16-11_01.png",
+    "cover_horizontal": "./game_material/COVER_HORIZONTAL_final.jpg",
+    "cover_horizontal_url": "https://tapcode-sce.spark.xd.com/assets/game_material/p_tdhd/COVER_HORIZONTAL_final.jpg"
+  },
+  "test_qrcode": {
+    "url": "https://tapcode-sce.spark.xd.com/qrcode/p_tdhd_1781702342904.png",
+    "generated_at": "2026-06-17T13:19:03.079Z"
+  },
+  "metadata": {
+    "updated_at": "2026-06-17T13:24:01.165Z",
+    "promo_dependent_hash": "19d384268c678e3f47a068fd969c1cf5"
+  }
+}
