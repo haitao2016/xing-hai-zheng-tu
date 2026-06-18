@@ -210,6 +210,39 @@ Data.ENEMY_TYPES = {
         score = 200, metal = 4, energy = 3, blueprint = 2,
         behavior = "splitter",  -- 死亡时分裂为2个小型体
     },
+    -- P13.1 新增敌人
+    absorber = {
+        name = "虚空吞噬者",
+        hp = 80, speed = 70, size = 16,
+        fire = 2.0, dmg = 8, range = 250,
+        color = { 100, 0, 180 },
+        score = 220, metal = 4, energy = 4, blueprint = 2,
+        behavior = "absorber",  -- 吸收子弹转化为护盾
+    },
+    disruptor = {
+        name = "电磁干扰器",
+        hp = 65, speed = 90, size = 14,
+        fire = 4.0, dmg = 0, range = 400,
+        color = { 0, 200, 255 },
+        score = 250, metal = 3, energy = 5, blueprint = 3,
+        behavior = "disruptor",  -- 释放EMP脉冲禁用武器
+    },
+    warper = {
+        name = "时空扭曲者",
+        hp = 100, speed = 110, size = 15,
+        fire = 3.0, dmg = 15, range = 300,
+        color = { 200, 0, 255 },
+        score = 280, metal = 4, energy = 5, blueprint = 3,
+        behavior = "warper",  -- 瞬移到玩家背后
+    },
+    quantum = {
+        name = "量子分裂体",
+        hp = 90, speed = 80, size = 18,
+        fire = 1.5, dmg = 10, range = 260,
+        color = { 255, 150, 255 },
+        score = 200, metal = 3, energy = 4, blueprint = 2,
+        behavior = "quantum",  -- 被击杀后分裂为2个小敌人
+    },
 }
 
 -- ============================================================================
@@ -350,6 +383,26 @@ Data.BOSS_DEFS = {
         pattern = "void",   -- 虚空弹幕：交替螺旋+传送偷袭
         hidden = true,      -- 隐藏Boss标记（不在任务链中出现）
     },
+    -- P13.2: 新Boss - 星际仲裁者
+    arbiter = {
+        name = "星际仲裁者",
+        color = { 255, 215, 0 },
+        hp = 3500, speed = 48, fire = 1.2, dmg = 25,
+        size = 44, range = 600, score = 5000,
+        blueprint = 15, key = 3, zone = "inner",
+        pattern = "arbiter",  -- 激光阵+召唤仲裁骑士
+        hidden = false,
+    },
+    -- P13.2: 新Boss - 深渊巨口
+    leviathan = {
+        name = "深渊巨口",
+        color = { 60, 20, 100 },
+        hp = 4500, speed = 40, fire = 2.0, dmg = 28,
+        size = 52, range = 650, score = 7000,
+        blueprint = 18, key = 4, zone = "inner",
+        pattern = "leviathan",  -- 吞噬小行星恢复HP+全屏黑洞吸附
+        hidden = false,
+    },
 }
 
 -- ============================================================================
@@ -485,6 +538,52 @@ Data.SECONDARY_WEAPONS = {
     { id = "shotgun",   name = "散射炮",     techId = "w7", color = { 255, 200, 50 },  cooldown = 1.2 },
     { id = "boomerang", name = "量子回旋镖", techId = "w8", color = { 0, 255, 200 },   cooldown = 2.0 },
     { id = "mine",      name = "等离子地雷", techId = "w9", color = { 200, 50, 255 },   cooldown = 3.0 },
+}
+
+-- ============================================================================
+-- P11: 游戏模式定义
+-- ============================================================================
+Data.GAME_MODES = {
+    {
+        id = "season",
+        name = "赛季模式",
+        nameEn = "SEASON MODE",
+        desc = "30天赛季挑战",
+        color = { 80, 200, 120 },
+        icon = "⚔",
+    },
+    {
+        id = "endless",
+        name = "无尽模式",
+        nameEn = "ENDLESS MODE",
+        desc = "无限挑战，难度递增",
+        color = { 180, 80, 255 },
+        icon = "∞",
+    },
+    {
+        id = "timeattack",
+        name = "限时挑战",
+        nameEn = "TIME ATTACK",
+        desc = "60秒击杀挑战",
+        color = { 255, 150, 50 },
+        icon = "⏱",
+    },
+    {
+        id = "bullethell",
+        name = "弹幕生存",
+        nameEn = "BULLET HELL",
+        desc = "躲避弹幕生存",
+        color = { 255, 80, 120 },
+        icon = "💫",
+    },
+    {
+        id = "bossrush",
+        name = "Boss Rush",
+        nameEn = "BOSS RUSH",
+        desc = "连续挑战Boss",
+        color = { 200, 50, 50 },
+        icon = "👹",
+    },
 }
 
 -- ============================================================================

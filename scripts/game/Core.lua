@@ -32,7 +32,7 @@ Core.angleToward = angleToward
 -- ============================================================================
 -- 游戏状态初始化
 -- ============================================================================
-function Core.newGame(playerName, factionId)
+function Core.newGame(playerName, factionId, gameMode)
     local state = {
         -- 玩家
         player = {
@@ -50,6 +50,9 @@ function Core.newGame(playerName, factionId)
         day = 1, dayTimer = 0, dayLength = 22,
         score = 0, seasonOver = false,
         isEndless = false, -- P7.2 无尽模式标志
+        gameMode = gameMode or "season", -- P11 游戏模式
+        -- P11.1 限时挑战模式参数
+        timeAttackDuration = 60,
         -- 资源
         resources = { metal = 0, energy = 0, blueprint = 0, ancient_key = 0 },
         -- 科技
@@ -257,17 +260,78 @@ function Core.update(state, dt, inputState)
     end
     local gdt = dt * timeScale * (state.timeScale or 1.0)
 
-    -- 赛季天数（用真实时间）
-    state.dayTimer = state.dayTimer + dt
-    if state.dayTimer >= state.dayLength then
-        state.dayTimer = state.dayTimer - state.dayLength
-        state.day = state.day + 1
-        if not state.isEndless and state.day > 30 then
+    -- P11: 模式特定逻辑
+    if state.gameMode == "timeattack" then
+        -- 限时挑战模式: 60秒倒计时
+        state.dayTimer = state.dayTimer + dt
+        if state.dayTimer >= state.timeAttackDuration then
             state.seasonOver = true
-            Core.addToast(state, S.get("hud_season_end"), { 255, 215, 0 })
+            Core.addToast(state, "⏱ 时间到!", { 255, 200, 50 })
             return
         end
-        Core.onNewDay(state)
+        -- 每5秒加速刷怪
+        local tick = math.floor(state.dayTimer / 5)
+        if tick > (state._lastTimeAttackTick or 0) then
+            state._lastTimeAttackTick = tick
+            for i = 1, 2 + tick do
+                Core.spawnEnemy(state, "drone", "middle")
+            end
+            -- 精英怪
+            if tick % 3 == 0 then
+                Core.spawnEnemy(state, "guard", "inner")
+            end
+        end
+    elseif state.gameMode == "bullethell" then
+        -- 弹幕生存模式: 无限弹幕
+        state.dayTimer = state.dayTimer + dt
+        -- 持续生成弹幕敌人
+        if #state.enemies < 8 then
+            Core.spawnEnemy(state, "drone", "middle")
+        end
+        -- 每波弹幕
+        state._bulletWaveTimer = (state._bulletWaveTimer or 0) + dt
+        if state._bulletWaveTimer > 3 then
+            state._bulletWaveTimer = 0
+            for _, e in ipairs(state.enemies) do
+                if e and e.hp > 0 and not e.isBoss then
+                    e.fireCd = 0  -- 触发弹幕
+                end
+            end
+        end
+    elseif state.gameMode == "bossrush" then
+        -- Boss Rush模式: 检查Boss击杀后下一波
+        local bossAlive = false
+        for _, e in ipairs(state.enemies) do
+            if e.isBoss and e.hp > 0 then bossAlive = true break end
+        end
+        if not bossAlive and not state.seasonOver then
+            state._bossRushIndex = (state._bossRushIndex or 0) + 1
+            local bossOrder = { "crystal", "hive", "titan", "void", "crystal", "hive" }
+            if state._bossRushIndex <= #bossOrder then
+                Core.spawnBoss(state, bossOrder[state._bossRushIndex])
+                -- 恢复30% HP
+                state.player.hp = math.min(state.player.hpMax, state.player.hp + state.player.hpMax * 0.3)
+                state.player.shield = state.player.shieldMax
+                Core.addToast(state, string.format("Boss %d/6: %s", state._bossRushIndex, bossOrder[state._bossRushIndex]), { 255, 100, 100 })
+            else
+                state.seasonOver = true
+                Core.addToast(state, "🏆 Boss Rush 完成!", { 255, 215, 0 })
+                return
+            end
+        end
+    else
+        -- 正常赛季/无尽模式天数逻辑
+        state.dayTimer = state.dayTimer + dt
+        if state.dayTimer >= state.dayLength then
+            state.dayTimer = state.dayTimer - state.dayLength
+            state.day = state.day + 1
+            if not state.isEndless and state.day > 30 then
+                state.seasonOver = true
+                Core.addToast(state, S.get("hud_season_end"), { 255, 215, 0 })
+                return
+            end
+            Core.onNewDay(state)
+        end
     end
 
     -- 输入桥接：将 inputState 存入 state 供 PlayerCtrl 读取

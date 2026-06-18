@@ -248,6 +248,101 @@ function EnemyAI.updateEnemies(state, Core, dt)
                 e.fireCd = eFire
                 EnemyAI.enemyFire(state, Core, e)
             end
+        -- P13.1: 虚空吞噬者 - 吸收子弹转化为护盾
+        elseif behavior == "absorber" then
+            local toPlayer = angleToward(e.x, e.y, p.x, p.y)
+            e.angle = toPlayer
+            local spd = e.cfg.speed * spdMul
+            if d > e.cfg.range * 0.6 then
+                e.vx = e.vx + math.cos(toPlayer) * spd * dt
+                e.vy = e.vy + math.sin(toPlayer) * spd * dt
+            elseif d < 100 then
+                e.vx = e.vx - math.cos(toPlayer) * spd * dt
+                e.vy = e.vy - math.sin(toPlayer) * spd * dt
+            end
+            -- 吸收玩家子弹（检查碰撞范围内）
+            local absorbRange = 60
+            for bi = #state.bullets, 1, -1 do
+                local b = state.bullets[bi]
+                local bd = dist(e.x, e.y, b.x, b.y)
+                if bd < absorbRange then
+                    table.remove(state.bullets, bi)
+                    -- 转化为护盾
+                    e.shieldAbsorb = (e.shieldAbsorb or 0) + 5
+                    Core.spawnParticles(state, b.x, b.y, { 100, 0, 180 }, 3)
+                end
+            end
+            -- 持续消耗吸收的能量生成护盾
+            if e.shieldAbsorb and e.shieldAbsorb > 0 then
+                local shieldDrain = math.min(e.shieldAbsorb, dt * 20)
+                e.shieldAbsorb = e.shieldAbsorb - shieldDrain
+                e.absorbedShield = (e.absorbedShield or 0) + shieldDrain
+            end
+        -- P13.1: 电磁干扰器 - 释放EMP脉冲禁用武器
+        elseif behavior == "disruptor" then
+            local toPlayer = angleToward(e.x, e.y, p.x, p.y)
+            e.angle = toPlayer
+            local spd = e.cfg.speed * spdMul
+            if d > 300 then
+                e.vx = e.vx + math.cos(toPlayer) * spd * dt
+                e.vy = e.vy + math.sin(toPlayer) * spd * dt
+            end
+            e.empCd = (e.empCd or 6.0) - dt
+            if e.empCd <= 0 then
+                e.empCd = 6.0
+                -- 释放EMP脉冲
+                local empRange = 400
+                if d < empRange then
+                    -- 禁用玩家武器2秒
+                    state.weaponDisabled = 2.0
+                    Core.addFloatingText(state, p.x, p.y - 30, "⚡武器被干扰!", { 0, 200, 255 }, 1.0)
+                    Core.shake(state, 4, 0.3)
+                    Core.spawnParticles(state, p.x, p.y, { 0, 200, 255 }, 20)
+                end
+                Core.spawnParticles(state, e.x, e.y, { 0, 200, 255 }, 15)
+            end
+        -- P13.1: 时空扭曲者 - 瞬移到玩家背后
+        elseif behavior == "warper" then
+            local toPlayer = angleToward(e.x, e.y, p.x, p.y)
+            e.angle = toPlayer
+            local spd = e.cfg.speed * spdMul
+            e.warpCd = (e.warpCd or 4.0) - dt
+            if e.warpCd <= 0 and d < 500 then
+                e.warpCd = 4.0
+                -- 瞬移到玩家背后
+                local behindAng = toPlayer + math.pi
+                local warpDist = 80 + math.random() * 60
+                local oldX, oldY = e.x, e.y
+                e.x = p.x + math.cos(behindAng) * warpDist
+                e.y = p.y + math.sin(behindAng) * warpDist
+                Core.addFloatingText(state, oldX, oldY - 20, "瞬移!", { 200, 0, 255 }, 0.6)
+                Core.spawnParticles(state, oldX, oldY, { 200, 0, 255 }, 12)
+                Core.spawnParticles(state, e.x, e.y, { 200, 0, 255 }, 12)
+            else
+                e.vx = e.vx + math.cos(toPlayer) * spd * 0.3 * dt
+                e.vy = e.vy + math.sin(toPlayer) * spd * 0.3 * dt
+            end
+            -- 从背后攻击伤害更高
+            e.fireCd = e.fireCd - dt
+            if e.fireCd <= 0 and d < e.cfg.range then
+                e.fireCd = eFire
+                EnemyAI.enemyFire(state, Core, e, 1.5)  -- 背后攻击1.5倍伤害
+            end
+        -- P13.1: 量子分裂体 - 被击杀后分裂
+        elseif behavior == "quantum" then
+            local toPlayer = angleToward(e.x, e.y, p.x, p.y)
+            e.angle = toPlayer
+            local spd = e.cfg.speed * spdMul
+            if d > e.cfg.range * 0.5 then
+                e.vx = e.vx + math.cos(toPlayer) * spd * dt
+                e.vy = e.vy + math.sin(toPlayer) * spd * dt
+            end
+            e.fireCd = e.fireCd - dt
+            if e.fireCd <= 0 and d < e.cfg.range then
+                e.fireCd = eFire
+                EnemyAI.enemyFire(state, Core, e)
+            end
+            e._quantumSplit = true  -- 标记为可分裂
         else
             -- 默认AI
             local spd = e.cfg.speed * spdMul
@@ -382,6 +477,125 @@ function EnemyAI.enemyFire(state, Core, e)
                         vy = math.sin(a) * speed * 0.7,
                         life = 2.8, dmg = math.floor(e.cfg.dmg * 0.7),
                         color = { 60, 0, 120 },
+                    })
+                end
+            end
+        -- P13.2: 星际仲裁者 - 激光阵+召唤仲裁骑士
+        elseif pattern == "arbiter" then
+            e.arbiterPhase = (e.arbiterPhase or 0) + 1
+            local phase = e.arbiterPhase % 4
+            if phase == 0 then
+                -- 激光阵：放射状弹幕
+                for i = 0, 7 do
+                    local a = (TAU / 8) * i
+                    table.insert(state.enemyBullets, {
+                        x = e.x, y = e.y,
+                        vx = math.cos(a) * speed * 1.2,
+                        vy = math.sin(a) * speed * 1.2,
+                        life = 2.0, dmg = e.cfg.dmg,
+                        color = { 255, 215, 0 },
+                    })
+                end
+            elseif phase == 1 then
+                -- 定向弹幕
+                local toPlayer = angleToward(e.x, e.y, p.x, p.y)
+                for i = -2, 2 do
+                    local a = toPlayer + i * 0.15
+                    table.insert(state.enemyBullets, {
+                        x = e.x, y = e.y,
+                        vx = math.cos(a) * speed * 1.0,
+                        vy = math.sin(a) * speed * 1.0,
+                        life = 1.8, dmg = e.cfg.dmg,
+                        color = { 255, 180, 50 },
+                    })
+                end
+            elseif phase == 2 then
+                -- 召唤仲裁骑士
+                if #state.enemies < 12 then
+                    local summonAng = rand(0, TAU)
+                    local cfg = Data.ENEMY_TYPES["guard"]
+                    table.insert(state.enemies, {
+                        x = e.x + math.cos(summonAng) * 60,
+                        y = e.y + math.sin(summonAng) * 60,
+                        vx = 0, vy = 0, angle = rand(0, TAU),
+                        hp = math.floor(cfg.hp * 0.5), hpMax = math.floor(cfg.hp * 0.5),
+                        cfg = cfg, radius = cfg.size, fireCd = rand(0, cfg.fire),
+                        hitFlash = 0, size = cfg.size,
+                        isBossMinion = true,
+                    })
+                    Core.spawnParticles(state, e.x, e.y, { 255, 215, 0 }, 15)
+                end
+            else
+                -- 螺旋弹幕
+                local spin = state.dayTimer * 3
+                for i = 0, 5 do
+                    local a = (TAU / 6) * i + spin
+                    table.insert(state.enemyBullets, {
+                        x = e.x, y = e.y,
+                        vx = math.cos(a) * speed * 0.8,
+                        vy = math.sin(a) * speed * 0.8,
+                        life = 2.5, dmg = math.floor(e.cfg.dmg * 0.8),
+                        color = { 255, 230, 100 },
+                    })
+                end
+            end
+        -- P13.2: 深渊巨口 - 吞噬小行星恢复HP+全屏黑洞吸附
+        elseif pattern == "leviathan" then
+            e.leviathanPhase = (e.leviathanPhase or 0) + 1
+            local phase = e.leviathanPhase % 5
+            if phase == 0 then
+                -- 黑洞吸附效果：吸引玩家和子弹
+                local d = dist(e.x, e.y, p.x, p.y)
+                if d < 400 then
+                    local pullStrength = (400 - d) * 30 * dt
+                    local toE = angleToward(p.x, p.y, e.x, e.y)
+                    p.vx = p.vx + math.cos(toE) * pullStrength
+                    p.vy = p.vy + math.sin(toE) * pullStrength
+                end
+                -- 吸引子弹
+                for bi = #state.bullets, 1, -1 do
+                    local b = state.bullets[bi]
+                    local bd = dist(e.x, e.y, b.x, b.y)
+                    if bd < 300 and bd > 50 then
+                        local toE = angleToward(b.x, b.y, e.x, e.y)
+                        b.vx = b.vx + math.cos(toE) * 150 * dt
+                        b.vy = b.vy + math.sin(toE) * 150 * dt
+                    end
+                end
+            elseif phase == 1 or phase == 2 then
+                -- 扇形弹幕
+                local toPlayer = angleToward(e.x, e.y, p.x, p.y)
+                for i = -3, 3 do
+                    local a = toPlayer + i * 0.2
+                    table.insert(state.enemyBullets, {
+                        x = e.x, y = e.y,
+                        vx = math.cos(a) * speed * 0.9,
+                        vy = math.sin(a) * speed * 0.9,
+                        life = 2.0, dmg = e.cfg.dmg,
+                        color = { 100, 50, 150 },
+                    })
+                end
+            else
+                -- 吞噬小行星恢复HP
+                for ai = #state.asteroids, 1, -1 do
+                    local a = state.asteroids[ai]
+                    local ad = dist(e.x, e.y, a.x, a.y)
+                    if ad < 100 then
+                        e.hp = math.min(e.hpMax, e.hp + 50)
+                        table.remove(state.asteroids, ai)
+                        Core.spawnParticles(state, e.x, e.y, { 150, 100, 200 }, 10)
+                        break
+                    end
+                end
+                -- 圆环弹幕
+                for i = 0, 11 do
+                    local a = (TAU / 12) * i
+                    table.insert(state.enemyBullets, {
+                        x = e.x, y = e.y,
+                        vx = math.cos(a) * speed * 0.7,
+                        vy = math.sin(a) * speed * 0.7,
+                        life = 2.5, dmg = math.floor(e.cfg.dmg * 0.6),
+                        color = { 80, 40, 120 },
                     })
                 end
             end
@@ -553,6 +767,33 @@ function EnemyAI.onEnemyKilled(state, Core, e)
             end
             Core.spawnExplosion(state, e.x, e.y, { 60, 255, 120 }, 10, 100)
             Core.addFloatingText(state, e.x, e.y, S.get("float_split"), { 60, 255, 120 }, 0.8)
+        end
+        -- P13.1: 量子分裂体 - 击杀后分裂
+        if e.cfg.behavior == "quantum" then
+            for i = 1, 2 do
+                local ang = TAU / 2 * i + rand(-0.4, 0.4)
+                local childCfg = e.cfg
+                local child = {
+                    x = e.x + math.cos(ang) * 30,
+                    y = e.y + math.sin(ang) * 30,
+                    vx = math.cos(ang) * 120, vy = math.sin(ang) * 120,
+                    angle = rand(0, TAU),
+                    hp = math.floor(e.hpMax * 0.5), hpMax = math.floor(e.hpMax * 0.5),
+                    cfg = setmetatable({
+                        size = math.floor(childCfg.size * 0.65),
+                        speed = childCfg.speed * 1.2,
+                        dmg = math.floor(childCfg.dmg * 0.6),
+                        score = math.floor(childCfg.score * 0.4),
+                        metal = 1, energy = 1, blueprint = 0,
+                    }, { __index = childCfg }),
+                    fireCd = rand(0, 1.2), hitFlash = 0,
+                    size = math.floor(childCfg.size * 0.65),
+                    isSplitChild = true,
+                }
+                table.insert(state.enemies, child)
+            end
+            Core.spawnExplosion(state, e.x, e.y, { 255, 150, 255 }, 12, 120)
+            Core.addFloatingText(state, e.x, e.y, "量子分裂!", { 255, 150, 255 }, 0.8)
         end
         -- Phase 6: 增强爆炸粒子（combo倍率更高，加入内核闪光）
         local cMul = math.min(4.0, 1.0 + (Systems.combo.count - 1) * 0.2)

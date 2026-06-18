@@ -38,6 +38,7 @@ local selectedFaction = "merchants"
 local selectedSkinIdx = 1       -- 飞船皮肤索引
 local isDailyChallenge = false  -- 当前是否每日挑战模式
 local isEndless = false         -- 当前是否无尽模式
+local selectedGameMode = nil    -- P11: 选择的游戏模式 (timeattack/bullethell/bossrush)
 local dailyChallengeCompleted = false  -- P8.3: 今日挑战是否已完成
 local dailyChallengeScore = 0          -- P8.3: 今日挑战分数
 local persistentStats = Systems.initPersistentStats()  -- 永久统计
@@ -235,6 +236,7 @@ function HandleUpdate(eventType, eventData)
             end
             isDailyChallenge = false
             isEndless = false
+            selectedGameMode = nil  -- P11: 重置游戏模式
         end
     end
 
@@ -411,7 +413,30 @@ function HandleClick(cx, cy)
         if cx > endBtnX and cx < endBtnX + endBtnW and cy > endBtnY and cy < endBtnY + endBtnH3 then
             isDailyChallenge = false
             isEndless = true
+            selectedGameMode = nil
             StartGame()
+        end
+
+        -- P11: 新游戏模式按钮
+        local modeBtnY = endBtnY + endBtnH3 + 12
+        local modeBtnW = 120
+        local modeBtnH = 32
+        local modeGap = 8
+        local totalWidth = 3 * modeBtnW + 2 * modeGap
+        local modeStartX = screenW / 2 - totalWidth / 2
+        local modes = {
+            { id = "timeattack", x = modeStartX },
+            { id = "bullethell", x = modeStartX + modeBtnW + modeGap },
+            { id = "bossrush", x = modeStartX + 2 * (modeBtnW + modeGap) },
+        }
+        for _, mode in ipairs(modes) do
+            if cx > mode.x and cx < mode.x + modeBtnW and cy > modeBtnY and cy < modeBtnY + modeBtnH then
+                isDailyChallenge = false
+                isEndless = false
+                selectedGameMode = mode.id
+                StartGame()
+                break
+            end
         end
 
         -- 统计按钮（左下角）
@@ -603,7 +628,7 @@ function StartGame()
         end
     end
 
-    gameState = Core.newGame(S.get("default_faction"), selectedFaction)
+    gameState = Core.newGame(S.get("default_faction"), selectedFaction, selectedGameMode)
     -- 重置广告复活状态
     adReviveUsed = false
     showRevivePrompt = false
@@ -627,6 +652,24 @@ function StartGame()
     if isEndless then
         gameState.isEndless = true
         log:Write(LOG_INFO, "[StarSea] Endless mode enabled")
+    end
+    -- P11: 游戏模式处理
+    if selectedGameMode == "timeattack" then
+        gameState.gameMode = "timeattack"
+        gameState.timeAttackDuration = 60
+        gameState.dayLength = 9999  -- 不切换天数
+        log:Write(LOG_INFO, "[StarSea] Time Attack mode started")
+    elseif selectedGameMode == "bullethell" then
+        gameState.gameMode = "bullethell"
+        gameState.dayLength = 9999
+        log:Write(LOG_INFO, "[StarSea] Bullet Hell mode started")
+    elseif selectedGameMode == "bossrush" then
+        gameState.gameMode = "bossrush"
+        gameState.dayLength = 9999
+        gameState._bossRushIndex = 0
+        log:Write(LOG_INFO, "[StarSea] Boss Rush mode started")
+    else
+        gameState.gameMode = gameState.isEndless and "endless" or "season"
     end
     -- 每日挑战修饰符
     if isDailyChallenge then

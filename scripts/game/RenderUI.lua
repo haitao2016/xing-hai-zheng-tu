@@ -63,17 +63,37 @@ function M.drawHUD(vg, state, sw, sh)
         nvgText(vg, barX + barW / 2, sBarY + barH / 2, string.format("盾 %d/%d", math.floor(p.shield), p.shieldMax))
     end
 
-    -- 右上：分数 & 天数
+    -- 右上：分数 & 天数/模式信息
     nvgFontSize(vg, 16)
     nvgTextAlign(vg, NVG_ALIGN_RIGHT + NVG_ALIGN_TOP)
     nvgFillColor(vg, rgba(C.text))
     nvgText(vg, sw - 20, 20, string.format("分数: %d", state.score))
     nvgFontSize(vg, 13)
-    if state.isEndless then
-        -- 无尽模式：不显示总天数上限
+
+    -- P11: 模式特定UI
+    local mode = state.gameMode
+    if mode == "timeattack" then
+        -- 限时挑战：倒计时
+        local remaining = math.max(0, state.timeAttackDuration - state.dayTimer)
+        local r, g, b = 255, 200, 50
+        if remaining < 10 then r, g, b = 255, 80, 80 end  -- 红色警告
+        nvgFillColor(vg, nvgRGBA(r, g, b, 220))
+        nvgText(vg, sw - 20, 42, string.format("⏱ %.0f秒", remaining))
+    elseif mode == "bullethell" then
+        -- 弹幕生存：生存时间
+        nvgFillColor(vg, nvgRGBA(255, 80, 120, 200))
+        nvgText(vg, sw - 20, 42, string.format("💫 生存 %.0f秒", state.dayTimer))
+    elseif mode == "bossrush" then
+        -- Boss Rush：Boss进度
+        local idx = state._bossRushIndex or 0
+        nvgFillColor(vg, nvgRGBA(200, 50, 50, 220))
+        nvgText(vg, sw - 20, 42, string.format("👹 Boss %d/6", idx))
+    elseif state.isEndless then
+        -- 无尽模式
         nvgFillColor(vg, nvgRGBA(180, 120, 255, 200))
         nvgText(vg, sw - 20, 42, string.format("∞ 第 %d 天", state.day))
     else
+        -- 正常赛季
         nvgFillColor(vg, rgba(C.textDim))
         nvgText(vg, sw - 20, 42, string.format("第 %d / 30 天", state.day))
     end
@@ -480,6 +500,36 @@ function M.drawMenu(vg, sw, sh, selectedFaction, selectedSkinIdx, savedAchieveme
     nvgText(vg, endBtnX + endBtnW + 8, endBtnY + endBtnH / 2, "30天后继续挑战")
     nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)
 
+    -- P11: 新游戏模式按钮
+    local modeBtnY = endBtnY + endBtnH + 12
+    local modeBtnW = 120
+    local modeBtnH = 32
+    local modeGap = 8
+    local modes = {
+        { id = "timeattack", name = "⏱ 限时", color = { 200, 100, 30 }, border = { 255, 150, 50 } },
+        { id = "bullethell", name = "💫 弹幕", color = { 180, 30, 60 }, border = { 255, 80, 120 } },
+        { id = "bossrush", name = "👹 Rush", color = { 150, 30, 30 }, border = { 200, 50, 50 } },
+    }
+    local totalWidth = #modes * modeBtnW + (#modes - 1) * modeGap
+    local modeStartX = sw / 2 - totalWidth / 2
+
+    for i, mode in ipairs(modes) do
+        local mx = modeStartX + (i - 1) * (modeBtnW + modeGap)
+        nvgBeginPath(vg)
+        nvgRoundedRect(vg, mx, modeBtnY, modeBtnW, modeBtnH, 6)
+        local mGrad = nvgLinearGradient(vg, mx, modeBtnY, mx, modeBtnY + modeBtnH,
+            nvgRGBA(mode.color[1], mode.color[2], mode.color[3], 180),
+            nvgRGBA(mode.color[1] * 0.6, mode.color[2] * 0.6, mode.color[3] * 0.6, 160))
+        nvgFillPaint(vg, mGrad)
+        nvgFill(vg)
+        nvgStrokeColor(vg, nvgRGBA(mode.border[1], mode.border[2], mode.border[3], 120))
+        nvgStrokeWidth(vg, 1)
+        nvgStroke(vg)
+        nvgFontSize(vg, 11)
+        nvgFillColor(vg, nvgRGBA(255, 255, 255, 230))
+        nvgText(vg, mx + modeBtnW / 2, modeBtnY + modeBtnH / 2, mode.name)
+    end
+
     -- 飞船皮肤指示器 (P8.2: 显示锁定状态)
     local skinAreaX = btnX + btnW / 2 + 20
     local skinAreaY = btnY + 8
@@ -673,7 +723,17 @@ function M.drawGameOver(vg, state, sw, sh)
     elseif state.seasonOver then
         nvgFontSize(vg, 32)
         nvgFillColor(vg, nvgRGBA(0, 255, 200, 255))
-        nvgText(vg, sw / 2, sh * 0.15, "赛季完成！")
+        -- P11: 模式特定结束消息
+        local mode = state.gameMode
+        if mode == "timeattack" then
+            nvgText(vg, sw / 2, sh * 0.15, "⏱ 限时挑战结束!")
+        elseif mode == "bullethell" then
+            nvgText(vg, sw / 2, sh * 0.15, "💫 弹幕生存结束!")
+        elseif mode == "bossrush" then
+            nvgText(vg, sw / 2, sh * 0.15, "👹 Boss Rush 结束!")
+        else
+            nvgText(vg, sw / 2, sh * 0.15, "赛季完成！")
+        end
     else
         nvgFontSize(vg, 32)
         nvgFillColor(vg, nvgRGBA(255, 80, 80, 255))

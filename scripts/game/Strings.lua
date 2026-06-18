@@ -127,7 +127,17 @@ local zh = {
     menu_endless        = "∞ 无尽模式",
     menu_endless_desc   = "30天后继续挑战",
     menu_stats          = "生涯统计",
-    menu_version        = "v0.6.0",
+    menu_version        = "v0.7.0",
+    menu_mode_select    = "— 选择游戏模式 —",
+    menu_mode_season    = "赛季模式",
+    menu_mode_endless   = "无尽模式",
+    menu_mode_timeattack = "限时挑战",
+    menu_mode_bullethell = "弹幕生存",
+    menu_mode_bossrush  = "Boss Rush",
+    menu_mode_season_desc = "30天赛季挑战",
+    menu_mode_timeattack_desc = "60秒击杀挑战",
+    menu_mode_bullethell_desc = "躲避弹幕生存",
+    menu_mode_bossrush_desc = "连续挑战Boss",
 
     -- === 排行榜 ===
     leaderboard_title   = "🏆 星海排行榜",
