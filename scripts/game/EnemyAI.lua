@@ -654,6 +654,12 @@ function EnemyAI.onEnemyKilled(state, Core, e)
             bobPhase = rand(0, TAU),
         })
     end
+    -- P13.3: r_time_warp - 击杀时概率触发短暂慢动作
+    if Systems.hasRelic(state, "r_time_warp") and math.random() < 0.25 then
+        state.timeScale = 0.4
+        state.slowmoTimer = 1.0
+        Core.addFloatingText(state, e.x, e.y - 20, "时间扭曲!", { 100, 255, 255 }, 1.2)
+    end
     -- 遗物：连锁闪电
     if Systems.hasRelic(state, "r_chain") and math.random() < 0.30 then
         local nearest, nearDist = nil, 200

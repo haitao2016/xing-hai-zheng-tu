@@ -198,14 +198,15 @@ function M.drawQuestPanel(vg, state, sw, sh)
 end
 
 -- ============================================================================
--- 小地图
+-- P15.2: 小地图系统
 -- ============================================================================
 function M.drawMinimap(vg, state, sw, sh)
-    local mmSize = 100
+    local mmSize = 120
     local mmX = sw - mmSize - 16
     local mmY = sh - mmSize - 16
     local scale = mmSize / (2500 * 2.2)
 
+    -- 背景
     nvgBeginPath(vg)
     nvgCircle(vg, mmX + mmSize / 2, mmY + mmSize / 2, mmSize / 2)
     nvgFillColor(vg, nvgRGBA(10, 15, 30, 180))
@@ -217,21 +218,62 @@ function M.drawMinimap(vg, state, sw, sh)
     local cx = mmX + mmSize / 2
     local cy = mmY + mmSize / 2
 
-    -- 玩家
-    local px = cx + state.player.x * scale
-    local py = cy + state.player.y * scale
-    nvgBeginPath(vg)
-    nvgCircle(vg, px, py, 2.5)
-    nvgFillColor(vg, rgba(C.player))
-    nvgFill(vg)
+    -- P15.2: 小行星
+    for _, a in ipairs(state.asteroids or {}) do
+        local ax = cx + a.x * scale
+        local ay = cy + a.y * scale
+        local ar = math.max(0.5, a.radius * scale * 0.3)
+        nvgBeginPath(vg)
+        nvgCircle(vg, ax, ay, ar)
+        nvgFillColor(vg, nvgRGBA(120, 100, 80, 80))
+        nvgFill(vg)
+    end
+
+    -- P15.2: 资源拾取物
+    for _, pk in ipairs(state.pickups or {}) do
+        local px = cx + pk.x * scale
+        local py = cy + pk.y * scale
+        nvgBeginPath(vg)
+        nvgCircle(vg, px, py, 1.5)
+        if pk.kind == "metal" then
+            nvgFillColor(vg, nvgRGBA(200, 180, 100, 150))
+        elseif pk.kind == "energy" then
+            nvgFillColor(vg, nvgRGBA(80, 150, 255, 150))
+        elseif pk.kind == "blueprint" then
+            nvgFillColor(vg, nvgRGBA(200, 100, 255, 150))
+        else
+            nvgFillColor(vg, nvgRGBA(255, 215, 0, 150))
+        end
+        nvgFill(vg)
+    end
+
+    -- P15.2: 遗物掉落
+    for _, rd in ipairs(state.relicDrops or {}) do
+        local rx = cx + rd.x * scale
+        local ry = cy + rd.y * scale
+        nvgBeginPath(vg)
+        nvgCircle(vg, rx, ry, 2)
+        nvgFillColor(vg, nvgRGBA(255, 150, 200, 180))
+        nvgFill(vg)
+    end
 
     -- 中继站
     for _, r in ipairs(state.relays or {}) do
         local rx = cx + r.x * scale
         local ry = cy + r.y * scale
         nvgBeginPath(vg)
-        nvgRect(vg, rx - 1.5, ry - 1.5, 3, 3)
+        nvgRect(vg, rx - 2, ry - 2, 4, 4)
         nvgFillColor(vg, nvgRGBA(0, 255, 200, 180))
+        nvgFill(vg)
+    end
+
+    -- P15.2: 友军
+    for _, ally in ipairs(state.allies or {}) do
+        local ax = cx + ally.x * scale
+        local ay = cy + ally.y * scale
+        nvgBeginPath(vg)
+        nvgCircle(vg, ax, ay, 1.5)
+        nvgFillColor(vg, nvgRGBA(100, 0, 255, 150))
         nvgFill(vg)
     end
 
@@ -241,8 +283,24 @@ function M.drawMinimap(vg, state, sw, sh)
         local ey = cy + e.y * scale
         if e.isBoss then
             nvgBeginPath(vg)
-            nvgCircle(vg, ex, ey, 2)
+            nvgCircle(vg, ex, ey, 3)
             nvgFillColor(vg, rgba(C.boss))
+            nvgFill(vg)
+            -- Boss血条指示
+            local hpPct = e.hp / e.hpMax
+            nvgBeginPath(vg)
+            nvgRect(vg, ex - 4, ey + 4, 8, 1)
+            nvgFillColor(vg, nvgRGBA(60, 60, 60, 100))
+            nvgFill(vg)
+            nvgBeginPath(vg)
+            nvgRect(vg, ex - 4, ey + 4, 8 * hpPct, 1)
+            nvgFillColor(vg, rgba(C.boss))
+            nvgFill(vg)
+        elseif e.eliteReward then
+            -- 精英敌人
+            nvgBeginPath(vg)
+            nvgCircle(vg, ex, ey, 1.5)
+            nvgFillColor(vg, nvgRGBA(255, 150, 50, 180))
             nvgFill(vg)
         else
             nvgBeginPath(vg)
@@ -252,10 +310,28 @@ function M.drawMinimap(vg, state, sw, sh)
         end
     end
 
-    -- 标签
+    -- 玩家
+    local px = cx + state.player.x * scale
+    local py = cy + state.player.y * scale
+    nvgBeginPath(vg)
+    nvgCircle(vg, px, py, 3)
+    nvgFillColor(vg, rgba(C.player))
+    nvgFill(vg)
+    -- 玩家方向指示
+    local pa = state.player.angle or 0
+    local pw = 6
+    nvgBeginPath(vg)
+    nvgMoveTo(vg, px + math.cos(pa) * pw, py + math.sin(pa) * pw)
+    nvgLineTo(vg, px + math.cos(pa + 2.35) * 3, py + math.sin(pa + 2.35) * 3)
+    nvgLineTo(vg, px + math.cos(pa - 2.35) * 3, py + math.sin(pa - 2.35) * 3)
+    nvgClosePath(vg)
+    nvgFillColor(vg, rgba(C.player))
+    nvgFill(vg)
+
+    -- 标签/图例
     nvgFontFace(vg, "sans")
-    nvgFontSize(vg, 9)
-    nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_TOP)
+    nvgFontSize(vg, 8)
+    nvgTextAlign(vg, NVG_ALIGN_LEFT + NVG_ALIGN_TOP)
     nvgFillColor(vg, nvgRGBA(140, 160, 200, 120))
     nvgText(vg, mmX + mmSize / 2, mmY + mmSize + 3, "星图")
 end
@@ -608,6 +684,151 @@ function M.drawMenu(vg, sw, sh, selectedFaction, selectedSkinIdx, savedAchieveme
     nvgFontSize(vg, 12)
     nvgFillColor(vg, nvgRGBA(150, 180, 220, 220))
     nvgText(vg, statBtnX + statBtnW / 2, statBtnY + statBtnH / 2, "生涯统计")
+
+    -- P15: 设置按钮
+    local setBtnX = sw - 90
+    local setBtnY = sh - 46
+    local setBtnW = 80
+    local setBtnH = 32
+    nvgBeginPath(vg)
+    nvgRoundedRect(vg, setBtnX, setBtnY, setBtnW, setBtnH, 6)
+    nvgFillColor(vg, nvgRGBA(30, 40, 60, 220))
+    nvgFill(vg)
+    nvgStrokeColor(vg, nvgRGBA(100, 140, 200, 120))
+    nvgStrokeWidth(vg, 1)
+    nvgStroke(vg)
+    nvgFontSize(vg, 12)
+    nvgFillColor(vg, nvgRGBA(150, 180, 220, 220))
+    nvgText(vg, setBtnX + setBtnW / 2, setBtnY + setBtnH / 2, "设置")
+
+end
+
+-- ============================================================================
+-- P15: 设置菜单
+-- ============================================================================
+function M.drawSettings(vg, sw, sh, settings, settingSliders)
+    menuTime = menuTime + 0.016
+
+    -- 背景
+    nvgBeginPath(vg)
+    nvgRect(vg, 0, 0, sw, sh)
+    nvgFillColor(vg, nvgRGBA(10, 15, 30, 230))
+    nvgFill(vg)
+
+    -- 标题
+    nvgFontSize(vg, 28)
+    nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)
+    nvgFillColor(vg, nvgRGBA(0, 180, 255, 255))
+    nvgText(vg, sw / 2, 60, "设置")
+
+    -- 设置面板背景
+    local panelX = sw / 2 - 200
+    local panelY = 100
+    local panelW = 400
+    local panelH = 420
+    nvgBeginPath(vg)
+    nvgRoundedRect(vg, panelX, panelY, panelW, panelH, 12)
+    nvgFillColor(vg, nvgRGBA(20, 25, 45, 220))
+    nvgFill(vg)
+    nvgStrokeColor(vg, nvgRGBA(60, 80, 120, 150))
+    nvgStrokeWidth(vg, 1)
+    nvgStroke(vg)
+
+    -- 音量设置区域
+    nvgFontSize(vg, 14)
+    nvgFillColor(vg, nvgRGBA(100, 150, 200, 200))
+    nvgText(vg, panelX + 20, panelY + 30, "音量")
+
+    -- 滑动条绘制
+    local sliderY = panelY + 55
+    for _, slider in ipairs(settingSliders) do
+        -- 标签
+        nvgFontSize(vg, 12)
+        nvgTextAlign(vg, NVG_ALIGN_LEFT + NVG_ALIGN_MIDDLE)
+        nvgFillColor(vg, nvgRGBA(180, 200, 230, 220))
+        nvgText(vg, panelX + 20, sliderY, slider.label)
+
+        -- 滑动条背景
+        local sliderW = 280
+        local sliderH = 6
+        local sliderX = panelX + 120
+        nvgBeginPath(vg)
+        nvgRoundedRect(vg, sliderX, sliderY - sliderH / 2, sliderW, sliderH, 3)
+        nvgFillColor(vg, nvgRGBA(40, 50, 80, 200))
+        nvgFill(vg)
+
+        -- 滑动条进度
+        local value = settings[slider.id]
+        local progress = (value - slider.min) / (slider.max - slider.min)
+        nvgBeginPath(vg)
+        nvgRoundedRect(vg, sliderX, sliderY - sliderH / 2, sliderW * progress, sliderH, 3)
+        nvgFillColor(vg, nvgRGBA(0, 180, 255, 200))
+        nvgFill(vg)
+
+        -- 滑动条手柄
+        local handleX = sliderX + sliderW * progress
+        nvgBeginPath(vg)
+        nvgCircle(vg, handleX, sliderY, 8)
+        nvgFillColor(vg, nvgRGBA(255, 255, 255, 240))
+        nvgFill(vg)
+        nvgStrokeColor(vg, nvgRGBA(0, 180, 255, 200))
+        nvgStrokeWidth(vg, 2)
+        nvgStroke(vg)
+
+        -- 当前值
+        nvgFontSize(vg, 11)
+        nvgTextAlign(vg, NVG_ALIGN_RIGHT + NVG_ALIGN_MIDDLE)
+        nvgFillColor(vg, nvgRGBA(150, 180, 220, 180))
+        if slider.id == "fpsLimit" then
+            nvgText(vg, panelX + panelW - 20, sliderY, value .. " FPS")
+        else
+            nvgText(vg, panelX + panelW - 20, sliderY, math.floor(value * 100) .. "%")
+        end
+
+        sliderY = sliderY + 35
+    end
+
+    -- 震动开关
+    nvgFontSize(vg, 14)
+    nvgFillColor(vg, nvgRGBA(100, 150, 200, 200))
+    nvgText(vg, panelX + 20, sliderY + 15, "屏幕震动")
+
+    local toggleX = panelX + panelW - 60
+    local toggleY = sliderY + 15
+    local toggleW = 40
+    local toggleH = 22
+    nvgBeginPath(vg)
+    nvgRoundedRect(vg, toggleX, toggleY - toggleH / 2, toggleW, toggleH, 11)
+    if settings.shakeEnabled then
+        nvgFillColor(vg, nvgRGBA(0, 180, 255, 200))
+    else
+        nvgFillColor(vg, nvgRGBA(60, 70, 100, 200))
+    end
+    nvgFill(vg)
+
+    nvgBeginPath(vg)
+    nvgCircle(vg, settings.shakeEnabled and (toggleX + toggleW - 12) or (toggleX + 12), toggleY, 9)
+    nvgFillColor(vg, nvgRGBA(255, 255, 255, 240))
+    nvgFill(vg)
+
+    sliderY = sliderY + 50
+
+    -- 返回按钮
+    local backBtnX = sw / 2
+    local backBtnY = panelY + panelH + 20
+    local backBtnW = 120
+    local backBtnH = 36
+    nvgBeginPath(vg)
+    nvgRoundedRect(vg, backBtnX - backBtnW / 2, backBtnY, backBtnW, backBtnH, 8)
+    nvgFillColor(vg, nvgRGBA(40, 50, 80, 220))
+    nvgFill(vg)
+    nvgStrokeColor(vg, nvgRGBA(100, 140, 200, 150))
+    nvgStrokeWidth(vg, 1)
+    nvgStroke(vg)
+    nvgFontSize(vg, 14)
+    nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)
+    nvgFillColor(vg, nvgRGBA(180, 200, 230, 220))
+    nvgText(vg, backBtnX, backBtnY + backBtnH / 2, "返回")
 
     -- 底部按键提示
     nvgFontSize(vg, 11)

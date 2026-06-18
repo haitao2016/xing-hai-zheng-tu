@@ -545,6 +545,29 @@ function Core.update(state, dt, inputState)
     state.cam.x = lerp(state.cam.x, camTargetX, dt * camSpeed) + (state.shakeOffX or 0)
     state.cam.y = lerp(state.cam.y, camTargetY, dt * camSpeed) + (state.shakeOffY or 0)
 
+    -- P13.3: r_shockwave - 每5秒释放周围冲击波
+    if Systems.hasRelic(state, "r_shockwave") then
+        state._shockwaveTimer = (state._shockwaveTimer or 0) + dt
+        if state._shockwaveTimer >= 5.0 then
+            state._shockwaveTimer = 0
+            local p = state.player
+            local shockwaveRange = 180
+            for _, e in ipairs(state.enemies) do
+                local d = dist(p.x, p.y, e.x, e.y)
+                if d < shockwaveRange then
+                    e.hp = e.hp - 15
+                    e.hitFlash = 0.1
+                    local knockback = (shockwaveRange - d) / shockwaveRange * 150
+                    local toE = angleToward(p.x, p.y, e.x, e.y)
+                    e.vx = e.vx + math.cos(toE) * knockback
+                    e.vy = e.vy + math.sin(toE) * knockback
+                end
+            end
+            Core.spawnParticles(state, p.x, p.y, { 255, 150, 100 }, 20)
+            Core.addFloatingText(state, p.x, p.y - 20, "冲击波!", { 255, 150, 100 }, 0.8)
+        end
+    end
+
     -- Phase 9.1: 动态BGM系统 - 根据战斗状态切换BGM
     state._bgmCheckTimer = (state._bgmCheckTimer or 0) + dt
     if state._bgmCheckTimer >= 0.5 then

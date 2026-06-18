@@ -40,6 +40,22 @@ function PlayerCtrl.updatePlayer(state, Core, dt)
         p.vx = p.vx / curSpd * maxSpd
         p.vy = p.vy / curSpd * maxSpd
     end
+    -- P13.3: r_shield_charge - 移动时护盾充能
+    if Systems.hasRelic(state, "r_shield_charge") and curSpd > 20 and p.shield < p.shieldMax then
+        p.shield = p.shield + dt * 3
+    end
+    -- P13.3: r_stealth - 静止2秒后进入隐形
+    if Systems.hasRelic(state, "r_stealth") then
+        if curSpd < 5 then
+            p.stealthTimer = (p.stealthTimer or 0) + dt
+            if p.stealthTimer >= 2 then
+                p.isStealth = true
+            end
+        else
+            p.stealthTimer = 0
+            p.isStealth = false
+        end
+    end
     -- 位置更新
     p.x = p.x + p.vx * dt
     p.y = p.y + p.vy * dt
@@ -141,14 +157,19 @@ function PlayerCtrl.playerFire(state, Core)
     -- 主弹
     local muzzleX = p.x + math.cos(p.angle) * 16
     local muzzleY = p.y + math.sin(p.angle) * 16
-    table.insert(state.bullets, {
+    local b = {
         x = muzzleX, y = muzzleY,
         vx = math.cos(p.angle) * bulletSpeed,
         vy = math.sin(p.angle) * bulletSpeed,
         life = 1.5, dmg = dmg,
         pierce = state.stats.pierce or 0,
         crit = crit,
-    })
+    }
+    -- P13.3: r_bullet_homing - 子弹50%概率追踪敌人
+    if Systems.hasRelic(state, "r_bullet_homing") and math.random() < 0.5 then
+        b.homing = true
+    end
+    table.insert(state.bullets, b)
     -- P9: 射击音效
     Audio.playShoot()
     -- Phase 6: 射击后坐力（玩家微微后退）
@@ -266,6 +287,8 @@ function PlayerCtrl.damagePlayer(state, Core, rawDmg, srcX, srcY)
     -- 遗物：反伤甲 (r_thorns: 反弹30%)
     local reflectRate = 0
     if Systems.hasRelic(state, "r_thorns") then reflectRate = 0.3 end
+    -- P13.3: r_damage_reflect - 反弹20%伤害
+    if Systems.hasRelic(state, "r_damage_reflect") then reflectRate = reflectRate + 0.2 end
     -- P7.3: reflect powerup (反弹50%)
     if Core.hasPowerup(state, "reflect") then reflectRate = math.max(reflectRate, 0.5) end
     if reflectRate > 0 then
@@ -280,6 +303,12 @@ function PlayerCtrl.damagePlayer(state, Core, rawDmg, srcX, srcY)
             nearest.hitFlash = 0.1
             Core.addFloatingText(state, nearest.x, nearest.y - 15, "-" .. reflectDmg, {200, 100, 255})
         end
+    end
+    -- P13.3: r_hp_to_shield - HP<50%时自动转化为护盾
+    if Systems.hasRelic(state, "r_hp_to_shield") and p.hp < p.hpMax * 0.5 then
+        local convertAmount = math.min(p.hp, dt * 15)
+        p.hp = p.hp - convertAmount
+        p.shield = p.shield + convertAmount * 0.8  -- 80%转化率
     end
     -- P3.2 统计
     state.totalDmgTaken = state.totalDmgTaken + dmg

@@ -77,19 +77,33 @@ function Combat.checkCollisions(state, Core)
                     Core.addFloatingText(state, e.x, e.y - 14, "偏转!", { 80, 180, 255 }, 0.6)
                     goto nextBullet
                 end
-                e.hp = e.hp - b.dmg
+                -- P13.3: r_bonus_dmg - 攻击敌人背后伤害+50%
+                local finalDmg = b.dmg
+                if Systems.hasRelic(state, "r_bonus_dmg") then
+                    local toEnemy = angleToward(p.x, p.y, e.x, e.y)
+                    local enemyAngle = e.angle or 0
+                    local angleDiff = math.abs(math.atan2(math.sin(toEnemy - enemyAngle), math.cos(toEnemy - enemyAngle)))
+                    if angleDiff < math.pi / 6 then  -- 60度内为背后
+                        finalDmg = math.floor(b.dmg * 1.5)
+                    end
+                end
+                e.hp = e.hp - finalDmg
                 e.hitFlash = 0.12
                 -- 伤害统计
-                state.totalDmgDealt = state.totalDmgDealt + b.dmg
+                state.totalDmgDealt = state.totalDmgDealt + finalDmg
                 -- 遗物：生命汲取
                 if Systems.hasRelic(state, "r_lifesteal") then
-                    local heal = math.max(1, math.floor(b.dmg * 0.10))
+                    local heal = math.max(1, math.floor(finalDmg * 0.10))
                     p.hp = math.min(p.hp + heal, p.hpMax or 100)
+                end
+                -- P13.3: r_energy_drain - 攻击敌人时恢复少量能量
+                if Systems.hasRelic(state, "r_energy_drain") then
+                    state.energy = math.min(state.energy + 1, state.energyMax or 100)
                 end
                 Core.spawnParticles(state, b.x, b.y, e.cfg.color, 3)
                 -- 伤害飘字
                 local dmgColor = b.crit and { 255, 100, 0 } or { 255, 220, 80 }
-                local dmgText = b.crit and ("暴击!" .. math.floor(b.dmg)) or tostring(math.floor(b.dmg))
+                local dmgText = b.crit and ("暴击!" .. math.floor(finalDmg)) or tostring(math.floor(finalDmg))
                 -- Phase 6: 暴击飘字更大更醒目
                 local dmgScale = b.crit and 1.8 or 1.0
                 Core.addFloatingText(state, e.x + rand(-8, 8), e.y - (e.radius or 12),

@@ -177,6 +177,17 @@ Systems.RELICS = {
     { id = "r_lucky", name = "幸运星", desc = "掉落率+40%,暴击+10%", color = {255,220,50}, icon = "☆" },
     { id = "r_overclock", name = "超频核心", desc = "射速+50%但过热时停火2秒", color = {255,60,0}, icon = "⚙" },
     { id = "r_echo", name = "回声弹", desc = "击杀时25%几率发射追踪弹", color = {0,200,180}, icon = "↺" },
+    -- P13.3 新增遗物（扩至25种）
+    { id = "r_shield_charge", name = "护盾充能", desc = "移动时护盾缓慢恢复", color = {0,150,255}, icon = "▣" },
+    { id = "r_hp_to_shield", name = "生命转化", desc = "HP<50%时自动转化为护盾", color = {100,200,255}, icon = "⇅" },
+    { id = "r_damage_reflect", name = "伤害反射", desc = "受到攻击时反弹20%伤害", color = {150,100,255}, icon = "⊛" },
+    { id = "r_energy_drain", name = "能量汲取", desc = "攻击敌人时恢复少量能量", color = {200,100,200}, icon = "◊" },
+    { id = "r_time_warp", name = "时间扭曲", desc = "击杀时概率触发短暂慢动作", color = {100,255,255}, icon = "∞" },
+    { id = "r_bullet_homing", name = "子弹追踪", desc = "子弹50%概率追踪敌人", color = {255,100,200}, icon = "⌖" },
+    { id = "r_shockwave", name = "冲击波", desc = "每5秒释放周围冲击波", color = {255,150,100}, icon = "◉" },
+    { id = "r_stealth", name = "隐形装置", desc = "静止2秒后进入隐形", color = {150,150,200}, icon = "◈" },
+    { id = "r_bonus_dmg", name = "弱点打击", desc = "攻击敌人背后伤害+50%", color = {255,80,120}, icon = "⊕" },
+    { id = "r_resource_magnet", name = "资源磁吸", desc = "资源拾取范围翻倍", color = {255,200,100}, icon = "⊛" },
 }
 
 Systems.MAX_RELIC_SLOTS = 3

@@ -520,9 +520,50 @@ Data.SPECIAL_EVENTS = {
             { label = "稳定虫洞", desc = "召唤友军×3 持续20秒", effect = "wormhole_allies" },
         },
     },
+    -- P13.4 新增事件
+    {
+        id = "rescue",
+        title = "星际救援",
+        desc = "一艘遇险飞船发出求救信号...",
+        color = { 0, 200, 100 },
+        options = {
+            { label = "救援行动", desc = "消耗30能量 → 获得稀有遗物", effect = "rescue_ship" },
+            { label = "无视求救", desc = "获得10金属(飞船自爆残骸)", effect = "ignore_rescue" },
+        },
+    },
+    {
+        id = "meteor_shower",
+        title = "陨石雨",
+        desc = "大量小行星从深空坠落！",
+        color = { 255, 120, 50 },
+        options = {
+            { label = "躲避", desc = "进入安全区域，等待陨石雨结束", effect = "meteor_safe" },
+            { label = "穿越", desc = "穿过陨石雨，获得大量资源", effect = "meteor_risk" },
+        },
+    },
+    {
+        id = "portal",
+        title = "空间传送门",
+        desc = "一个稳定的传送门出现在附近...",
+        color = { 100, 200, 255 },
+        options = {
+            { label = "传送", desc = "立即传送到中继站附近", effect = "portal_jump" },
+            { label = "充能", desc = "消耗20能量 → 护盾+50%持续20秒", effect = "portal_charge" },
+        },
+    },
+    {
+        id = "virus",
+        title = "病毒入侵",
+        desc = "飞船系统检测到恶意代码入侵！",
+        color = { 150, 50, 100 },
+        options = {
+            { label = "隔离", desc = "禁用一项随机科技10秒，清除病毒", effect = "virus_quarantine" },
+            { label = "硬重置", desc = "消耗15能量 → 立即清除病毒", effect = "virus_reset" },
+        },
+    },
 }
 
--- P6.2 难度曲线参数
+--- P6.2 难度曲线参数
 Data.DIFFICULTY = {
     enemyHpScale = 0.04,     -- 每天敌人HP增加4%
     enemyDmgScale = 0.03,    -- 每天敌人DMG增加3%

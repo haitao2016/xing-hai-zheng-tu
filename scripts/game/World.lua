@@ -29,6 +29,8 @@ function World.updatePickups(state, Core, dt)
     local p = state.player
     local baseRange = 80
     if Systems.hasRelic(state, "r_magnet") then baseRange = 160 end
+    -- P13.3: r_resource_magnet - 资源拾取范围翻倍
+    if Systems.hasRelic(state, "r_resource_magnet") then baseRange = baseRange * 2 end
     local magnetRange = Core.hasPowerup(state, "magnet") and (baseRange * 3) or baseRange
 
     for i = #state.pickups, 1, -1 do
@@ -447,6 +449,87 @@ function World.applyEventEffect(state, Core, effect)
             })
         end
         Core.addFloatingText(state, p.x, p.y - 20, "友军增援!", { 100, 0, 255 }, 1.5)
+    -- P13.4 新增事件效果
+    elseif effect == "rescue_ship" then
+        if state.resources.energy >= 30 then
+            state.resources.energy = state.resources.energy - 30
+            -- 掉落一个随机未拥有的遗物
+            local available = {}
+            for _, r in ipairs(Systems.RELICS) do
+                if not Systems.hasRelic(state, r.id) then
+                    table.insert(available, r.id)
+                end
+            end
+            if #available > 0 then
+                local chosen = available[math.random(1, #available)]
+                state.relicDrops = state.relicDrops or {}
+                table.insert(state.relicDrops, {
+                    x = p.x, y = p.y,
+                    relicId = chosen,
+                    def = Systems.getRelicDef(chosen),
+                    life = 30,
+                    spawnTime = 0,
+                    bobPhase = rand(0, TAU),
+                })
+                Core.addFloatingText(state, p.x, p.y - 20, "救援成功!", { 0, 200, 100 }, 1.5)
+            else
+                Core.addFloatingText(state, p.x, p.y - 20, "遗物已满!", { 200, 200, 100 }, 1.2)
+                state.resources.energy = state.resources.energy + 30
+            end
+        else
+            Core.addToast(state, "能量不足！需要30", { 255, 80, 80 })
+        end
+    elseif effect == "ignore_rescue" then
+        state.resources.metal = state.resources.metal + 10
+        Core.addFloatingText(state, p.x, p.y - 20, "+10金属", { 200, 180, 100 }, 1.2)
+    elseif effect == "meteor_safe" then
+        -- 安全区域：10秒无敌
+        table.insert(state.activePowerups, { kind = "invincible", remaining = 10 })
+        Core.addFloatingText(state, p.x, p.y - 20, "进入安全区!", { 255, 200, 100 }, 1.2)
+    elseif effect == "meteor_risk" then
+        -- 穿过陨石雨获得大量资源
+        for i = 1, 10 do
+            local ang = rand(0, TAU)
+            local r = rand(40, 120)
+            local kinds = { "metal", "metal", "energy", "energy", "blueprint" }
+            table.insert(state.pickups, {
+                x = p.x + math.cos(ang) * r, y = p.y + math.sin(ang) * r,
+                kind = kinds[randInt(1, 5)], amount = randInt(6, 12), life = 15,
+            })
+        end
+        Core.addFloatingText(state, p.x, p.y - 20, "穿越成功!", { 255, 150, 50 }, 1.5)
+    elseif effect == "portal_jump" then
+        -- 传送到中继站附近
+        p.x = rand(-300, 300)
+        p.y = rand(-300, 300)
+        Core.addFloatingText(state, p.x, p.y - 20, "传送完成!", { 100, 200, 255 }, 1.5)
+        Core.shake(state, 6, 0.4)
+    elseif effect == "portal_charge" then
+        if state.resources.energy >= 20 then
+            state.resources.energy = state.resources.energy - 20
+            p.shieldMax = p.shieldMax * 1.5
+            p.shield = p.shieldMax
+            table.insert(state.activePowerups, { kind = "shield_boost", remaining = 20 })
+            Core.addFloatingText(state, p.x, p.y - 20, "护盾充能!", { 100, 200, 255 }, 1.5)
+        else
+            Core.addToast(state, "能量不足！需要20", { 255, 80, 80 })
+        end
+    elseif effect == "virus_quarantine" then
+        -- 禁用一项随机科技10秒
+        local techs = { "dmg", "hp", "shield", "fireRate", "splitShot", "pierce", "laser", "missile" }
+        local disabled = techs[math.random(1, #techs)]
+        state.virusDisabledTech = disabled
+        state.virusDisabledTimer = 10
+        Core.addFloatingText(state, p.x, p.y - 20, "系统隔离!", { 150, 50, 100 }, 1.2)
+    elseif effect == "virus_reset" then
+        if state.resources.energy >= 15 then
+            state.resources.energy = state.resources.energy - 15
+            state.virusDisabledTech = nil
+            state.virusDisabledTimer = 0
+            Core.addFloatingText(state, p.x, p.y - 20, "病毒清除!", { 50, 150, 100 }, 1.2)
+        else
+            Core.addToast(state, "能量不足！需要15", { 255, 80, 80 })
+        end
     end
 end
 

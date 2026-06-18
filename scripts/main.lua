@@ -29,6 +29,7 @@ local STATE_TECH = "tech"
 local STATE_OVER = "gameover"
 local STATE_RANK = "leaderboard"
 local STATE_STATS = "stats"
+local STATE_SETTINGS = "settings"  -- P15: 设置菜单
 
 local currentState = STATE_MENU
 local gameState = nil
@@ -43,6 +44,23 @@ local dailyChallengeCompleted = false  -- P8.3: 今日挑战是否已完成
 local dailyChallengeScore = 0          -- P8.3: 今日挑战分数
 local persistentStats = Systems.initPersistentStats()  -- 永久统计
 local savedAchievements = {}    -- 持久化成就列表（跨局保留）
+
+-- P15: 设置菜单
+local settings = {
+    masterVolume = 1.0,
+    bgmVolume = 0.8,
+    sfxVolume = 1.0,
+    shakeEnabled = true,
+    shakeIntensity = 1.0,
+    fpsLimit = 60,
+}
+local settingSliders = {
+    { id = "masterVolume", label = "主音量", min = 0, max = 1, step = 0.05 },
+    { id = "bgmVolume", label = "背景音乐", min = 0, max = 1, step = 0.05 },
+    { id = "sfxVolume", label = "音效", min = 0, max = 1, step = 0.05 },
+    { id = "shakeIntensity", label = "震动强度", min = 0, max = 2, step = 0.1 },
+    { id = "fpsLimit", label = "帧率限制", min = 30, max = 120, step = 10 },
+}
 
 -- 屏幕尺寸
 local screenW = 0
@@ -447,6 +465,14 @@ function HandleClick(cx, cy)
             currentState = STATE_STATS
         end
 
+        -- P15: 设置按钮（右下角）
+        local setBtnX = screenW - 90
+        local setBtnY = screenH - 46
+        if cx > setBtnX and cx < setBtnX + 80 and cy > setBtnY and cy < setBtnY + 32 then
+            GameAudio.playClick()
+            currentState = STATE_SETTINGS
+        end
+
         -- 皮肤切换箭头（开始按钮右侧: btnX中心+85+20=105, 箭头在+64偏移处）
         local skinArrowX = screenW / 2 + 105 + 64
         local skinArrowY = screenH * 0.76 + 8
@@ -580,6 +606,49 @@ function HandleClick(cx, cy)
             GameAudio.playClick()
             currentState = STATE_MENU
         end
+    elseif currentState == STATE_SETTINGS then
+        -- P15: 设置菜单点击处理
+        local dpr = graphics:GetDPR()
+        local sw = screenW / dpr
+        local sh = screenH / dpr
+        local lcx = cx / dpr
+        local lcy = cy / dpr
+
+        -- 返回按钮
+        local backBtnX = sw / 2 - 60
+        local backBtnY = sh * 0.85
+        if lcx > backBtnX and lcx < backBtnX + 120 and lcy > backBtnY and lcy < backBtnY + 36 then
+            GameAudio.playClick()
+            currentState = STATE_MENU
+            return
+        end
+
+        -- 滑动条点击
+        local panelX = sw / 2 - 200
+        local sliderY = 155
+        for _, slider in ipairs(settingSliders) do
+            local sliderW = 280
+            local sliderX = panelX + 120
+            if lcx > sliderX - 10 and lcx < sliderX + sliderW + 10 and lcy > sliderY - 15 and lcy < sliderY + 15 then
+                local progress = (lcx - sliderX) / sliderW
+                progress = math.max(0, math.min(1, progress))
+                local value = slider.min + progress * (slider.max - slider.min)
+                value = math.floor(value / slider.step) * slider.step
+                settings[slider.id] = value
+                GameAudio.playClick()
+                return
+            end
+            sliderY = sliderY + 35
+        end
+
+        -- 震动开关
+        local toggleX = sw / 2 + 140
+        local toggleY = sliderY + 15
+        if lcx > toggleX and lcx < toggleX + 40 and lcy > toggleY - 11 and lcy < toggleY + 11 then
+            settings.shakeEnabled = not settings.shakeEnabled
+            GameAudio.playClick()
+            return
+        end
     end
 end
 
@@ -703,6 +772,9 @@ function HandleNanoVGRender(eventType, eventData)
 
     if currentState == STATE_MENU then
         Render.drawMenu(vg, sw, sh, selectedFaction, selectedSkinIdx, savedAchievements, dailyChallengeCompleted)
+
+    elseif currentState == STATE_SETTINGS then
+        Render.drawSettings(vg, sw, sh, settings, settingSliders)
 
     elseif currentState == STATE_GAME and gameState then
         -- 清空背景
