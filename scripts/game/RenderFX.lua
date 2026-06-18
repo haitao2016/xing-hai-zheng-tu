@@ -235,31 +235,45 @@ function M.drawCollectAnims(vg, state, sw, sh)
         local sx, sy = worldToScreen(ca.x, ca.y, cam, sw, sh)
         if sx > -50 and sx < sw + 50 and sy > -50 and sy < sh + 50 then
             local progress = 1 - ca.timer / ca.maxTime
-            local radius = 8 + progress * 30
             local alpha = math.floor((1 - progress) * 200)
 
-            -- 外扩光环
-            nvgBeginPath(vg)
-            nvgCircle(vg, sx, sy, radius)
-            nvgStrokeColor(vg, nvgRGBA(ca.color[1], ca.color[2], ca.color[3], alpha))
-            nvgStrokeWidth(vg, 3 * (1 - progress))
-            nvgStroke(vg)
+            -- 多层脉冲环
+            for ring = 1, 3 do
+                local ringProgress = math.max(0, progress - (ring - 1) * 0.2)
+                if ringProgress > 0 then
+                    local ringRadius = 5 + ringProgress * 35
+                    local ringAlpha = math.floor(alpha * (1 - (ring - 1) * 0.3))
+                    nvgBeginPath(vg)
+                    nvgCircle(vg, sx, sy, ringRadius)
+                    nvgStrokeColor(vg, nvgRGBA(ca.color[1], ca.color[2], ca.color[3], ringAlpha))
+                    nvgStrokeWidth(vg, 2 * (1 - ringProgress))
+                    nvgStroke(vg)
+                end
+            end
 
-            -- 内部闪光
+            -- 内部脉冲闪光
+            local flashScale = 1 + math.sin(progress * TAU * 4) * 0.3
+            local flashRadius = 6 * flashScale * (1 - progress * 0.5)
             nvgBeginPath(vg)
-            nvgCircle(vg, sx, sy, radius * 0.4)
-            nvgFillColor(vg, nvgRGBA(255, 255, 255, math.floor(alpha * 0.5)))
+            nvgCircle(vg, sx, sy, flashRadius)
+            local flashAlpha = math.floor((1 - progress) * 180)
+            nvgFillColor(vg, nvgRGBA(255, 255, 255, flashAlpha))
             nvgFill(vg)
 
-            -- 散射粒子（伪）
-            for j = 0, 5 do
-                local angle = j * TAU / 6 + progress * TAU * 0.3
-                local pr = radius * 0.8
-                local px = sx + math.cos(angle) * pr
-                local py = sy + math.sin(angle) * pr
+            -- 向玩家方向汇聚的粒子
+            local px, py = worldToScreen(state.player.x, state.player.y, cam, sw, sh)
+            local dx = px - sx
+            local dy = py - sy
+            local distToPlayer = math.sqrt(dx * dx + dy * dy)
+            for j = 0, 7 do
+                local angle = j * TAU / 8 + progress * TAU * 0.5
+                local moveDist = progress * distToPlayer * 0.3
+                local pr = 12 + progress * 8
+                local px2 = sx + math.cos(angle) * pr + dx / distToPlayer * moveDist
+                local py2 = sy + math.sin(angle) * pr + dy / distToPlayer * moveDist
                 nvgBeginPath(vg)
-                nvgCircle(vg, px, py, 2 * (1 - progress))
-                nvgFillColor(vg, nvgRGBA(ca.color[1], ca.color[2], ca.color[3], math.floor(alpha * 0.6)))
+                nvgCircle(vg, px2, py2, 2.5 * (1 - progress * 0.7))
+                nvgFillColor(vg, nvgRGBA(ca.color[1], ca.color[2], ca.color[3], math.floor(alpha * 0.7)))
                 nvgFill(vg)
             end
         end

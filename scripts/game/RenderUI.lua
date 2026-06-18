@@ -22,8 +22,13 @@ local menuStars = nil
 function M.drawHUD(vg, state, sw, sh)
     local p = state.player
 
+    local hitShake = 0
+    if p.hitFlash and p.hitFlash > 0 then
+        hitShake = math.sin(p.hitFlash * 40) * 4
+    end
+
     -- 左上：HP & Shield 条
-    local barX, barY, barW, barH = 20, 20, 180, 14
+    local barX, barY, barW, barH = 20 + hitShake, 20, 180, 14
     nvgBeginPath(vg)
     nvgRoundedRect(vg, barX, barY, barW, barH, 3)
     nvgFillColor(vg, nvgRGBA(30, 30, 40, 200))
@@ -31,7 +36,11 @@ function M.drawHUD(vg, state, sw, sh)
     local hpRatio = math.max(0, p.hp / p.hpMax)
     nvgBeginPath(vg)
     nvgRoundedRect(vg, barX, barY, barW * hpRatio, barH, 3)
-    nvgFillColor(vg, rgba(C.hpBar))
+    if p.hitFlash and p.hitFlash > 0 then
+        nvgFillColor(vg, nvgRGBA(255, 80, 80, 255))
+    else
+        nvgFillColor(vg, rgba(C.hpBar))
+    end
     nvgFill(vg)
     nvgFontFace(vg, "sans")
     nvgFontSize(vg, 11)
@@ -675,23 +684,35 @@ function M.drawGameOver(vg, state, sw, sh)
     nvgFillColor(vg, rgba(C.text))
     nvgText(vg, sw / 2, sh * 0.24, string.format("最终得分: %d", state.score))
 
+    -- 阵营标识
+    local factionName = state.factionId == "merchants" and "星际商人联盟" or
+                        state.factionId == "warband" and "虚空战团" or
+                        state.factionId == "scholars" and "远古学者会" or "无阵营"
+    local factionIcon = state.factionId == "merchants" and "💰" or
+                        state.factionId == "warband" and "⚔️" or
+                        state.factionId == "scholars" and "📖" or "⭐"
+    nvgFontSize(vg, 12)
+    nvgFillColor(vg, nvgRGBA(180, 200, 230, 180))
+    nvgText(vg, sw / 2, sh * 0.28, string.format("%s · %s", factionIcon, factionName))
+
     nvgFontSize(vg, 13)
     nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)
-    local statY = sh * 0.32
+    local statY = sh * 0.34
     local lineH = 18
     local stats = {
         { "存活天数", tostring(state.day), C.text },
+        { "最高连击", tostring(Systems.combo.bestCombo or 0), { 255, 180, 0 } },
         { "总击杀", tostring(state.totalKills or 0), { 255, 160, 80 } },
+        { "Boss击杀", tostring(state.bossKillCount or 0), { 255, 40, 100 } },
         { "总伤害输出", tostring(math.floor(state.totalDmgDealt or 0)), { 255, 220, 80 } },
         { "总受到伤害", tostring(math.floor(state.totalDmgTaken or 0)), { 255, 100, 100 } },
         { "金属采集", tostring((state.totalCollected or {}).metal or 0), { 180, 180, 220 } },
         { "能源采集", tostring((state.totalCollected or {}).energy or 0), { 100, 255, 100 } },
         { "图纸采集", tostring((state.totalCollected or {}).blueprint or 0), { 200, 150, 255 } },
+        { "密钥获取", tostring((state.totalCollected or {}).ancient_key or 0), { 255, 215, 0 } },
+        { "任务完成", tostring(#(state.completedQuests or {})), { 0, 255, 200 } },
+        { "科技解锁", tostring(#(state.ownedTech or {})), { 100, 200, 255 } },
     }
-    local bossKillCount = 0
-    for _ in pairs(state.bossesKilled or {}) do bossKillCount = bossKillCount + 1 end
-    stats[#stats + 1] = { "Boss击杀", tostring(bossKillCount), { 255, 40, 100 } }
-    stats[#stats + 1] = { "任务完成", tostring(#(state.completedQuests or {})), { 0, 255, 200 } }
 
     for i, s in ipairs(stats) do
         local y = statY + (i - 1) * lineH
@@ -701,6 +722,27 @@ function M.drawGameOver(vg, state, sw, sh)
         nvgFillColor(vg, nvgRGBA(s[3][1], s[3][2], s[3][3], 255))
         nvgTextAlign(vg, NVG_ALIGN_LEFT + NVG_ALIGN_MIDDLE)
         nvgText(vg, sw / 2 + 10, y, s[2])
+    end
+
+    -- 遗物展示
+    if state.relics and #state.relics > 0 then
+        local relicY = statY + #stats * lineH + 8
+        nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)
+        nvgFontSize(vg, 11)
+        nvgFillColor(vg, nvgRGBA(180, 120, 255, 180))
+        nvgText(vg, sw / 2, relicY, "获得遗物")
+        local relicX = sw / 2 - (#state.relics * 18)
+        for i, relicId in ipairs(state.relics) do
+            local relicDef = nil
+            for _, r in ipairs(Systems.RELICS or {}) do
+                if r.id == relicId then relicDef = r; break end
+            end
+            if relicDef then
+                nvgFontSize(vg, 18)
+                nvgFillColor(vg, nvgRGBA(relicDef.color[1], relicDef.color[2], relicDef.color[3], 220))
+                nvgText(vg, relicX + i * 36, relicY + 18, relicDef.icon)
+            end
+        end
     end
 
     -- 评分
@@ -729,6 +771,23 @@ function M.drawGameOver(vg, state, sw, sh)
         nvgRGBA(0, 200, 255, 60), nvgRGBA(180, 80, 255, 60))
     nvgStrokePaint(vg, borderGrad)
     nvgStroke(vg)
+
+    -- 卡片角标装饰
+    local corners = {
+        { sw * 0.05, sh * 0.04 },
+        { sw * 0.95, sh * 0.04 },
+        { sw * 0.05, sh * 0.76 },
+        { sw * 0.95, sh * 0.76 },
+    }
+    for _, c in ipairs(corners) do
+        nvgBeginPath(vg)
+        nvgMoveTo(vg, c[1], c[2] + 12)
+        nvgLineTo(vg, c[1], c[2])
+        nvgLineTo(vg, c[1] + 12, c[2])
+        nvgStrokeColor(vg, nvgRGBA(0, 200, 255, 40))
+        nvgStrokeWidth(vg, 1.5)
+        nvgStroke(vg)
+    end
 
     -- 卡片底部水印
     nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)
@@ -1101,16 +1160,45 @@ function M.drawCombo(vg, state, sw, sh)
 
     local cx = sw * 0.5
     local cy = 50
-    local scale = 1.0 + c.displayTimer * 0.5
     nvgFontFace(vg, "sans")
     nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)
 
-    nvgFontSize(vg, math.floor(28 * scale))
-    local comboAlpha = math.floor(200 + c.displayTimer * 55)
-    nvgFillColor(vg, nvgRGBA(255, 200, 50, math.min(255, comboAlpha)))
-    nvgText(vg, cx, cy, string.format("%dx COMBO", c.count))
+    local animPulse = math.sin(c.displayTimer * 30) * 0.05
+    local elasticScale
+    if c.displayTimer > 0 then
+        local t = math.min(c.displayTimer * 12, 1)
+        local overshoot = 1.3
+        local bounce = 0.85
+        elasticScale = 1 + (overshoot - 1) * t * (2 - t) * bounce ^ (1 - t)
+    else
+        elasticScale = 1.0
+    end
+    local finalScale = (1.0 + animPulse) * elasticScale
 
-    nvgFontSize(vg, 13)
+    local comboAlpha = math.floor(200 + c.displayTimer * 55)
+    local alpha = math.min(255, comboAlpha)
+
+    local textY = cy + math.sin(c.displayTimer * 25) * 3
+
+    nvgFontSize(vg, math.floor(28 * finalScale))
+    local glowSize = 6 * finalScale
+    nvgBeginPath(vg)
+    nvgRect(vg, cx - 60 * finalScale, textY - 14 * finalScale, 120 * finalScale, 28 * finalScale)
+    local glowGrad = nvgRadialGradient(vg, cx, textY, 0, 60 * finalScale,
+        nvgRGBA(255, 200, 50, math.floor(alpha * 0.15)),
+        nvgRGBA(255, 200, 50, 0))
+    nvgFillPaint(vg, glowGrad)
+    nvgFill(vg)
+
+    local textColor = { 255, 200, 50 }
+    if c.count >= 10 then textColor = { 255, 120, 50 } end
+    if c.count >= 20 then textColor = { 255, 50, 100 } end
+    if c.count >= 30 then textColor = { 200, 50, 255 } end
+    nvgFillColor(vg, nvgRGBA(textColor[1], textColor[2], textColor[3], alpha))
+    nvgText(vg, cx, textY, string.format("%dx COMBO", c.count))
+
+    local multiplierScale = 1.0 + math.sin(c.displayTimer * 20) * 0.03
+    nvgFontSize(vg, math.floor(13 * multiplierScale))
     nvgFillColor(vg, nvgRGBA(255, 150, 0, 200))
     nvgText(vg, cx, cy + 20, string.format("x%.1f 分数倍率", c.multiplier))
 
@@ -1121,8 +1209,10 @@ function M.drawCombo(vg, state, sw, sh)
     nvgRoundedRect(vg, cx - barW / 2, cy + 32, barW, barH, 2)
     nvgFillColor(vg, nvgRGBA(40, 40, 60, 160))
     nvgFill(vg)
+
+    local barPulse = 1 + math.sin(c.displayTimer * 15) * 0.05
     nvgBeginPath(vg)
-    nvgRoundedRect(vg, cx - barW / 2, cy + 32, barW * ratio, barH, 2)
+    nvgRoundedRect(vg, cx - barW / 2, cy + 32, barW * ratio * barPulse, barH, 2)
     local rg = ratio > 0.3 and 255 or 255
     local gg = ratio > 0.3 and 200 or 60
     nvgFillColor(vg, nvgRGBA(rg, gg, 0, 220))

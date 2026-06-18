@@ -126,13 +126,27 @@ end
 ---@param name string 音效名
 ---@param volume? number 音量倍率(0~1)
 ---@param pitch? number 音调倍率
-function Audio.play(name, volume, pitch)
+---@param distance? number 距玩家距离（用于空间化音量衰减）
+function Audio.play(name, volume, pitch, distance)
     local snd = sounds[name]
     if not snd then return end
     local src = getSource()
     if not src then return end
-    local vol = (volume or 1.0) * Audio.sfxVolume * Audio.masterVolume
-    src:SetGain(vol)
+
+    local baseVol = (volume or 1.0) * Audio.sfxVolume * Audio.masterVolume
+
+    if distance and distance > 0 then
+        local maxDist = 600
+        local minDist = 50
+        if distance > maxDist then
+            baseVol = baseVol * 0.15
+        elseif distance > minDist then
+            local ratio = (distance - minDist) / (maxDist - minDist)
+            baseVol = baseVol * (1 - ratio * 0.85)
+        end
+    end
+
+    src:SetGain(baseVol)
     local freq = 44100 * (pitch or 1.0)
     src:Play(snd, freq)
 end

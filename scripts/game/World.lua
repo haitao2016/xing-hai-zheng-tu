@@ -340,6 +340,11 @@ function World.applyEventEffect(state, Core, effect)
         state.activeEvent = { name = "EMP脉冲", effect = "emp", color = { 80, 200, 255 } }
         state.eventRemaining = 5
         Core.shake(state, 6, 0.4)
+    elseif effect == "storm" then
+        state.activeEvent = { name = "太阳风暴", effect = "storm", color = { 255, 160, 0 } }
+        state.eventRemaining = 15
+        Core.shake(state, 8, 0.5)
+        Core.addFloatingText(state, p.x, p.y - 20, "太阳风暴!", { 255, 160, 0 }, 1.8)
     elseif effect == "speed_boost" then
         table.insert(state.activePowerups, { kind = "speed_boost", remaining = 8 })
     elseif effect == "blueprint_drop" then
