@@ -356,6 +356,96 @@ function EnemyAI.updateEnemies(state, Core, dt)
                 EnemyAI.enemyFire(state, Core, e)
             end
             e._quantumSplit = true  -- 标记为可分裂
+        elseif behavior == "fighter" then
+            local toPlayer = angleToward(e.x, e.y, p.x, p.y)
+            local spd = e.cfg.speed * spdMul
+            local desiredR = e.cfg.range * 0.75
+            if d > desiredR then
+                e.vx = math.cos(toPlayer) * spd
+                e.vy = math.sin(toPlayer) * spd
+            elseif d < desiredR * 0.6 then
+                e.vx = -math.cos(toPlayer) * spd * 0.6
+                e.vy = -math.sin(toPlayer) * spd * 0.6
+            else
+                e.vx = math.cos(toPlayer + math.pi * 0.5) * spd * 0.5
+                e.vy = math.sin(toPlayer + math.pi * 0.5) * spd * 0.5
+            end
+            e.angle = toPlayer
+            e.fireCd = e.fireCd - dt
+            if e.fireCd <= 0 and d < e.cfg.range then
+                e.fireCd = eFire
+                EnemyAI.enemyFire(state, Core, e)
+            end
+        elseif behavior == "cruiser" then
+            local toPlayer = angleToward(e.x, e.y, p.x, p.y)
+            local spd = e.cfg.speed * spdMul
+            if d > e.cfg.range * 0.9 then
+                e.vx = math.cos(toPlayer) * spd
+                e.vy = math.sin(toPlayer) * spd
+            else
+                e.vx = math.cos(toPlayer + math.pi * 0.5) * spd * 0.4
+                e.vy = math.sin(toPlayer + math.pi * 0.5) * spd * 0.4
+            end
+            e.angle = toPlayer
+            e.fireCd = e.fireCd - dt
+            if e.fireCd <= 0 and d < e.cfg.range then
+                e.fireCd = eFire
+                -- 三连发
+                EnemyAI.enemyFire(state, Core, e)
+                EnemyAI.enemyFire(state, Core, e)
+                EnemyAI.enemyFire(state, Core, e)
+            end
+        elseif behavior == "phase" then
+            e._phaseTimer = (e._phaseTimer or 0) + dt
+            e._phased = e._phased or false
+            if e._phaseTimer > 2.5 then
+                e._phaseTimer = 0
+                e._phased = not e._phased
+                if e._phased then
+                    Core.spawnParticles(state, e.x, e.y, e.cfg.color, 15)
+                end
+            end
+            local toPlayer = angleToward(e.x, e.y, p.x, p.y)
+            local spd = e.cfg.speed * spdMul
+            if e._phased then
+                e.vx = math.cos(toPlayer) * spd * 1.4
+                e.vy = math.sin(toPlayer) * spd * 1.4
+            else
+                e.vx = math.cos(toPlayer) * spd * 0.7
+                e.vy = math.sin(toPlayer) * spd * 0.7
+            end
+            e.angle = toPlayer
+            if not e._phased then
+                e.fireCd = e.fireCd - dt
+                if e.fireCd <= 0 and d < e.cfg.range then
+                    e.fireCd = eFire
+                    EnemyAI.enemyFire(state, Core, e)
+                end
+            end
+        elseif behavior == "leech" then
+            local toPlayer = angleToward(e.x, e.y, p.x, p.y)
+            local spd = e.cfg.speed * spdMul
+            if d > 200 then
+                e.vx = math.cos(toPlayer) * spd
+                e.vy = math.sin(toPlayer) * spd
+            else
+                e.vx = math.cos(toPlayer) * spd * 0.3
+                e.vy = math.sin(toPlayer) * spd * 0.3
+            end
+            e.angle = toPlayer
+            e.fireCd = e.fireCd - dt
+            if e.fireCd <= 0 and d < e.cfg.range then
+                e.fireCd = eFire
+                EnemyAI.enemyFire(state, Core, e)
+                if d < 250 then
+                    state.player.energy = math.max(0, (state.player.energy or 100) - 2)
+                    if not e.hpGained then e.hpGained = 0 end
+                    e.hpGained = e.hpGained + 3
+                end
+            end
+            if d < 220 then
+                e.hp = math.min(e.hpMax, e.hp + 2 * dt)
+            end
         else
             -- 默认AI
             local spd = e.cfg.speed * spdMul

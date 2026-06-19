@@ -58,6 +58,45 @@ function Core.newGame(playerName, factionId, gameMode)
         -- 科技
         ownedTech = { "w1" },
         stats = nil,
+        -- P18: 战役与难度
+        campaignId = nil,
+        chapterProgress = {},
+        difficultyId = "standard",
+        zoneId = "frontier",
+        -- P19.2: 元进度（永久升级累积经验/已解锁等级）
+        meta = {
+            xp = 0,
+            upgrades = {},  -- id -> level
+        },
+        -- P20.1: 主动技能状态
+        skills = {
+            unlocked = { skill_dash = true },  -- 默认解锁冲刺
+            cooldowns = {},                     -- id -> remaining seconds
+            slowRemaining = 0,                  -- 时间减速剩余
+            invulnRemaining = 0,                -- 无敌剩余
+            tempShield = 0,                     -- 临时护盾数
+        },
+        -- P20.2: 连击等级（独立于 Phase3 的 combo 计数器）
+        comboRank = {
+            count = 0,
+            rank = "C",
+            decayTimer = 0,
+            maxThisRun = 0,
+        },
+        -- P21.2: 波次状态
+        wave = {
+            pattern = nil,
+            timeInPattern = 0,
+            spawnAccumulator = 0,
+            nextWaveTimer = 30,
+        },
+        -- P21.3: 神秘地点（每局随机生成几个）
+        mysteries = {},
+        -- P12.4: NPC 对话进度
+        npcProgress = {
+            commander = 0, engineer = 0, scout = 0,
+        },
+        flags = {},
         -- 阵营
         factionId = factionId,
         faction = factionId and Data.getFaction(factionId) or nil,
@@ -170,10 +209,9 @@ function Core.newGame(playerName, factionId, gameMode)
     Systems.initAchievements(state)
     Systems.resetCombo()
     state.bossNoHitFlag = true
-    -- 生成初始实体
     Core.spawnInitial(state)
-    -- 生成背景星星
     Core.generateStars(state)
+    Core.generateMysteries(state)
     return state
 end
 
@@ -253,6 +291,22 @@ end
 -- ============================================================================
 function Core.update(state, dt, inputState)
     if state.seasonOver then return end
+
+    -- 时间缩放（来自时间减速技能）
+    local scaledDt = dt * state.timeScale
+    -- 技能冷却更新
+    Core.updateSkills(state, scaledDt)
+    -- 连击衰减
+    if state.comboRank.count > 0 then
+        state.comboRank.decayTimer = state.comboRank.decayTimer - dt
+        if state.comboRank.decayTimer <= 0 then
+            state.comboRank.count = math.max(0, state.comboRank.count - 1)
+            state.comboRank.decayTimer = 2.0
+            Core.recomputeComboRank(state)
+        end
+    end
+    -- 波次系统（在标准刷怪逻辑旁并行）
+    Core.updateWaves(state, scaledDt)
 
     -- Phase 6: Hitstop - 击杀精英/Boss时短暂冻结
     if state.hitstop and state.hitstop > 0 then
@@ -947,6 +1001,7 @@ function Core.damagePlayer(state, rawDmg, srcX, srcY)
 end
 
 function Core.onEnemyKilled(state, e)
+    Core.incrementCombo(state)
     EnemyAI.onEnemyKilled(state, Core, e)
 end
 
@@ -996,5 +1051,256 @@ end
 
 -- P3.8 盟友模式常量
 Core.ALLY_MODES = { "attack", "follow", "guard" }
+
+-- ============================================================================
+-- P18/P19: 难度应用与元进度
+-- ============================================================================
+function Core.applyDifficulty(state)
+    local diff = Data.getDifficultyLevel(state.difficultyId)
+    if not diff or not diff.multipliers then return end
+    local m = diff.multipliers
+    state.difficultyMul = {
+        enemyHp = m.enemyHp or 1,
+        enemyDmg = m.enemyDmg or 1,
+        enemySpeed = m.enemySpeed or 1,
+        spawnRate = m.spawnRate or 1,
+        resource = m.resourceGain or 1,
+        blueprint = m.blueprintGain or 1,
+        playerDmg = m.playerDmg or 1,
+        playerHp = m.playerHp or 1,
+    }
+    state.stats.dmgMul = state.stats.dmgMul * (m.playerDmg or 1)
+    state.player.hpMax = math.floor(state.player.hpMax * (m.playerHp or 1))
+    state.player.hp = state.player.hpMax
+end
+
+function Core.applyMetaUpgrades(state)
+    if not state.meta or not state.meta.upgrades then return end
+    for id, lvl in pairs(state.meta.upgrades) do
+        if lvl and lvl > 0 then
+            local up = Data.getMetaUpgrade(id)
+            if up and up.apply then up.apply(state, lvl) end
+        end
+    end
+end
+
+function Core.addMetaXp(state, amount)
+    if not state.meta then return end
+    state.meta.xp = state.meta.xp + amount
+end
+
+-- ============================================================================
+-- P20.1: 主动技能系统
+-- ============================================================================
+function Core.updateSkills(state, dt)
+    local sk = state.skills
+    if sk.slowRemaining and sk.slowRemaining > 0 then
+        sk.slowRemaining = sk.slowRemaining - dt
+        if sk.slowRemaining <= 0 then
+            state.timeScale = 1.0
+        end
+    end
+    if sk.invulnRemaining and sk.invulnRemaining > 0 then
+        sk.invulnRemaining = sk.invulnRemaining - dt
+    end
+    for id, cd in pairs(sk.cooldowns) do
+        if cd > 0 then
+            sk.cooldowns[id] = math.max(0, cd - dt)
+        end
+    end
+end
+
+function Core.canUseSkill(state, skillId)
+    local sk = Data.getActiveSkill(skillId)
+    if not sk then return false end
+    if not state.skills.unlocked[skillId] then return false end
+    local cd = state.skills.cooldowns[skillId] or 0
+    if cd > 0 then return false end
+    if (state.player.energy or 100) < (sk.energyCost or 0) then return false end
+    return true
+end
+
+function Core.useSkill(state, skillId)
+    if not Core.canUseSkill(state, skillId) then return false end
+    local sk = Data.getActiveSkill(skillId)
+    if not sk then return false end
+    state.player.energy = (state.player.energy or 100) - (sk.energyCost or 0)
+    state.skills.cooldowns[skillId] = sk.cooldown
+
+    if skillId == "skill_dash" then
+        local dx, dy = (state.inputMoveX or 0), (state.inputMoveY or 0)
+        if math.abs(dx) < 0.01 and math.abs(dy) < 0.01 then
+            dx = math.cos(state.player.angle)
+            dy = math.sin(state.player.angle)
+        end
+        local mag = math.sqrt(dx * dx + dy * dy)
+        if mag > 0.01 then
+            dx, dy = dx / mag, dy / mag
+        end
+        state.player.x = state.player.x + dx * 200
+        state.player.y = state.player.y + dy * 200
+        state.skills.invulnRemaining = 0.8
+        Core.spawnParticles(state, state.player.x, state.player.y, sk.color, 20)
+        Core.addToast(state, "量子冲刺！", sk.color)
+    elseif skillId == "skill_shock" then
+        local r = sk.range
+        for _, e in ipairs(state.enemies) do
+            local d = Core.dist(e.x - state.player.x, e.y - state.player.y)
+            if d < r then
+                local pushed = (1 - d / r)
+                local a = math.atan2(e.y - state.player.y, e.x - state.player.x)
+                e.x = e.x + math.cos(a) * 80 * pushed
+                e.y = e.y + math.sin(a) * 80 * pushed
+                e.hp = e.hp - sk.damage
+                if e.hp <= 0 then
+                    Core.onEnemyKilled(state, e)
+                end
+            end
+        end
+        Core.spawnExplosion(state, state.player.x, state.player.y, sk.color, 30, 300)
+        Core.shake(state, 0.4, 0.3)
+        Core.addToast(state, "冲击波释放！", sk.color)
+    elseif skillId == "skill_slow" then
+        state.timeScale = 1 - sk.slowFactor + 0.2  -- 约 0.7
+        state.skills.slowRemaining = sk.duration
+        Core.addToast(state, "时间扭曲生效 " .. sk.duration .. "秒", sk.color)
+    elseif skillId == "skill_shield" then
+        state.player.hp = math.min(state.player.hpMax, state.player.hp + sk.healAmount)
+        state.player.shield = state.player.shield + 1
+        state.skills.tempShieldExpire = os and os.clock and os.clock() + sk.shieldDuration or nil
+        Core.addToast(state, "护盾充能 +" .. sk.healAmount .. " HP", sk.color)
+    elseif skillId == "skill_strike" then
+        local tx, ty = (state.inputAimX or state.player.x), (state.inputAimY or state.player.y)
+        local r = sk.range
+        for _, e in ipairs(state.enemies) do
+            if Core.dist(e.x - tx, e.y - ty) < r then
+                e.hp = e.hp - sk.damage
+                if e.hp <= 0 then Core.onEnemyKilled(state, e) end
+            end
+        end
+        Core.spawnExplosion(state, tx, ty, sk.color, 50, 400)
+        Core.shake(state, 1.0, 0.5)
+        Core.addToast(state, "轨道打击！", sk.color)
+    end
+    return true
+end
+
+-- ============================================================================
+-- P20.2: 连击等级系统
+-- ============================================================================
+function Core.recomputeComboRank(state)
+    local rank = Data.getComboRank(state.comboRank.count)
+    state.comboRank.rank = rank.rank
+    state.comboRank.color = rank.color
+    state.stats.comboDmgMul = rank.dmgMul
+    if state.comboRank.count > state.comboRank.maxThisRun then
+        state.comboRank.maxThisRun = state.comboRank.count
+    end
+end
+
+function Core.incrementCombo(state)
+    state.comboRank.count = state.comboRank.count + 1
+    state.comboRank.decayTimer = 3.0
+    local oldRank = state.comboRank.rank
+    Core.recomputeComboRank(state)
+    if oldRank ~= state.comboRank.rank then
+        Core.addToast(state, "连击等级提升：" .. state.comboRank.rank, state.comboRank.color)
+    end
+end
+
+-- ============================================================================
+-- P21.2: 波次系统升级
+-- ============================================================================
+function Core.updateWaves(state, dt)
+    local w = state.wave
+    w.nextWaveTimer = w.nextWaveTimer - dt
+    if w.pattern then
+        w.timeInPattern = w.timeInPattern + dt
+        if w.pattern.spawnInterval and w.pattern.spawnInterval > 0 then
+            w.spawnAccumulator = w.spawnAccumulator + dt
+            while w.spawnAccumulator >= w.pattern.spawnInterval and
+                  (w.pattern._spawned or 0) < (w.pattern.enemyCount or 0) do
+                w.spawnAccumulator = w.spawnAccumulator - w.pattern.spawnInterval
+                w.pattern._spawned = (w.pattern._spawned or 0) + 1
+                local kind = w.pattern.enemyType
+                if kind == "mixed" then
+                    local mix = { "drone", "fighter", "cruiser" }
+                    kind = mix[math.random(#mix)]
+                end
+                Core.spawnEnemy(state, kind)
+            end
+        end
+        if w.pattern.duration > 0 and w.timeInPattern >= w.pattern.duration then
+            -- 波次奖励
+            if w.pattern.reward then
+                local r = w.pattern.reward
+                Core.dropResources(state, state.player.x, state.player.y,
+                    r.metal or 0, r.energy or 0, r.blueprint or 0)
+                Core.addToast(state, "波次完成：" .. (w.pattern.name or "Wave"), { 200, 220, 255 })
+            end
+            w.pattern = nil
+            w.timeInPattern = 0
+            w.spawnAccumulator = 0
+            w.nextWaveTimer = math.random(25, 45)
+        end
+    elseif w.nextWaveTimer <= 0 then
+        local pat = Data.getRandomWavePattern()
+        state.wave.pattern = pat
+        state.wave.timeInPattern = 0
+        state.wave.pattern._spawned = 0
+        Core.addToast(state, "⚠ 波次开始：" .. (pat.name or "Wave"), { 255, 200, 100 })
+    end
+end
+
+-- ============================================================================
+-- P21.3: 神秘地点生成与交互
+-- ============================================================================
+function Core.generateMysteries(state)
+    state.mysteries = {}
+    local count = math.random(2, 4)
+    for i = 1, count do
+        local def = Data.MYSTERY_LOCATIONS[math.random(#Data.MYSTERY_LOCATIONS)]
+        local ang = math.random() * math.pi * 2
+        local r = math.random(400, 1800)
+        table.insert(state.mysteries, {
+            def = def,
+            id = def.id .. "_" .. i,
+            x = math.cos(ang) * r,
+            y = math.sin(ang) * r,
+            visited = false,
+            pulsePhase = math.random() * math.pi * 2,
+        })
+    end
+end
+
+function Core.checkMysteryInteraction(state)
+    if not state.mysteries then return end
+    for _, m in ipairs(state.mysteries) do
+        if not m.visited then
+            local d = Core.dist(m.x - state.player.x, m.y - state.player.y)
+            if d < 80 then
+                m.visited = true
+                if m.def and m.def.onVisit then
+                    local ok, err = pcall(m.def.onVisit, state)
+                    if not ok then
+                        Core.addToast(state, "神秘地点异常：" .. tostring(err), { 255, 100, 100 })
+                    end
+                end
+            end
+        end
+    end
+end
+
+-- ============================================================================
+-- P12.4: NPC 对话触发
+-- ============================================================================
+function Core.triggerNPCLine(state, npcId)
+    local line, npc = Data.getNPCLine(npcId, state.npcProgress[npcId] or 0)
+    if line then
+        state.npcProgress[npcId] = (state.npcProgress[npcId] or 0) + 1
+        Core.addToast(state, (npc and npc.name or "NPC") .. "：" .. line,
+            npc and { 200, 220, 255 } or { 255, 255, 255 })
+    end
+end
 
 return Core

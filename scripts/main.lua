@@ -24,26 +24,45 @@ local fontNormal = -1
 
 -- 游戏状态机
 local STATE_MENU = "menu"
+local STATE_DIFFICULTY = "difficulty"  -- P18/P19: 难度选择
+local STATE_CAMPAIGN = "campaign"      -- P18: 战役章节选择
 local STATE_GAME = "game"
 local STATE_TECH = "tech"
 local STATE_OVER = "gameover"
 local STATE_RANK = "leaderboard"
 local STATE_STATS = "stats"
-local STATE_SETTINGS = "settings"  -- P15: 设置菜单
+local STATE_SETTINGS = "settings"
 
 local currentState = STATE_MENU
 local gameState = nil
 
 -- 菜单状态
 local selectedFaction = "merchants"
-local selectedSkinIdx = 1       -- 飞船皮肤索引
-local isDailyChallenge = false  -- 当前是否每日挑战模式
-local isEndless = false         -- 当前是否无尽模式
-local selectedGameMode = nil    -- P11: 选择的游戏模式 (timeattack/bullethell/bossrush)
-local dailyChallengeCompleted = false  -- P8.3: 今日挑战是否已完成
-local dailyChallengeScore = 0          -- P8.3: 今日挑战分数
-local persistentStats = Systems.initPersistentStats()  -- 永久统计
-local savedAchievements = {}    -- 持久化成就列表（跨局保留）
+local selectedSkinIdx = 1
+local isDailyChallenge = false
+local isEndless = false
+local selectedGameMode = nil
+local dailyChallengeCompleted = false
+local dailyChallengeScore = 0
+local persistentStats = Systems.initPersistentStats()
+local savedAchievements = {}
+
+-- P18/P19: 难度与战役选择
+local selectedDifficultyIdx = 2    -- 默认标准难度
+local selectedChapterIdx = 1        -- 默认第一章
+local chapterProgress = {           -- 战役进度解锁
+    ch1 = false, ch2 = false, ch3 = false
+}
+-- P20.1: 主动技能映射 (数字键 1-5)
+local SKILL_KEYS = {
+    [KEY_1] = "skill_dash",
+    [KEY_2] = "skill_shock",
+    [KEY_3] = "skill_slow",
+    [KEY_4] = "skill_shield",
+    [KEY_5] = "skill_strike",
+}
+-- P21.3: 神秘地点交互冷却
+local mysteryInteractCd = 0
 
 -- P15: 设置菜单
 local settings = {
@@ -178,12 +197,15 @@ function HandleUpdate(eventType, eventData)
         GameAudio.setBGM("")
     end
 
+    -- 全局计时器：神秘地点交互冷却
+    if mysteryInteractCd > 0 then
+        mysteryInteractCd = math.max(0, mysteryInteractCd - dt)
+    end
+
     if currentState == STATE_GAME and gameState then
-        -- 构建输入
         local dpr = graphics:GetDPR()
         local logW = screenW / dpr
         local logH = screenH / dpr
-        -- 鼠标屏幕坐标 → 世界坐标（用于瞄准）
         local aimWorldX = (mouseX / dpr) - logW * 0.5 + gameState.cam.x
         local aimWorldY = (mouseY / dpr) - logH * 0.5 + gameState.cam.y
         local inp = {
@@ -192,14 +214,11 @@ function HandleUpdate(eventType, eventData)
             fire = input:GetMouseButtonDown(MOUSEB_LEFT) or mousePressed,
             screenW = logW, screenH = logH,
         }
-
-        -- WASD
         if input:GetKeyDown(KEY_W) or input:GetKeyDown(KEY_UP) then inp.up = true end
         if input:GetKeyDown(KEY_S) or input:GetKeyDown(KEY_DOWN) then inp.down = true end
         if input:GetKeyDown(KEY_A) or input:GetKeyDown(KEY_LEFT) then inp.left = true end
         if input:GetKeyDown(KEY_D) or input:GetKeyDown(KEY_RIGHT) then inp.right = true end
 
-        -- 更新游戏
         Core.update(gameState, dt, inp)
 
         -- 复活倒计时更新
@@ -312,44 +331,71 @@ end
 function HandleKeyDown(eventType, eventData)
     local key = eventData:GetInt("Key")
 
+    -- P18/P19: 难度选择界面
+    if currentState == STATE_DIFFICULTY then
+        if key == KEY_LEFT or key == KEY_A then
+            selectedDifficultyIdx = math.max(1, selectedDifficultyIdx - 1)
+            GameAudio.playClick()
+        elseif key == KEY_RIGHT or key == KEY_D then
+            selectedDifficultyIdx = math.min(4, selectedDifficultyIdx + 1)
+            GameAudio.playClick()
+        elseif key == KEY_ENTER or key == KEY_RETURN then
+            GameAudio.playClick()
+            currentState = STATE_CAMPAIGN  -- 进入战役章节选择
+        elseif key == KEY_ESCAPE then
+            currentState = STATE_MENU
+        end
+        return
+    end
+
+    -- P18: 战役章节选择界面
+    if currentState == STATE_CAMPAIGN then
+        if key == KEY_UP or key == KEY_W then
+            selectedChapterIdx = math.max(1, selectedChapterIdx - 1)
+            GameAudio.playClick()
+        elseif key == KEY_DOWN or key == KEY_S then
+            selectedChapterIdx = math.min(3, selectedChapterIdx + 1)
+            GameAudio.playClick()
+        elseif key == KEY_ENTER or key == KEY_RETURN then
+            -- 检查是否解锁
+            local unlocked = (selectedChapterIdx == 1) or chapterProgress["ch" .. (selectedChapterIdx - 1)]
+            if unlocked then
+                GameAudio.playClick()
+                StartGame()
+            else
+                GameAudio.playClick()
+            end
+        elseif key == KEY_ESCAPE then
+            currentState = STATE_MENU
+        end
+        return
+    end
+
     if currentState == STATE_GAME then
-        if key == KEY_T then
-            -- 切换科技树
+        -- P20.1: 主动技能（数字键 1-5）
+        if SKILL_KEYS[key] and gameState then
+            Core.useSkill(gameState, SKILL_KEYS[key])
+        elseif key == KEY_T then
             currentState = STATE_TECH
         elseif key == KEY_R then
-            -- 建造中继站
-            if gameState then
-                Core.buildRelay(gameState)
-            end
+            if gameState then Core.buildRelay(gameState) end
         elseif key == KEY_H then
-            -- 劫持敌人（权限系统）
-            if gameState then
-                Core.attemptHijack(gameState)
-            end
+            if gameState then Core.attemptHijack(gameState) end
         elseif key == KEY_F then
-            -- 切换盟友模式（攻击/跟随/护卫）
-            if gameState then
-                Core.cycleAllyMode(gameState)
-            end
+            if gameState then Core.cycleAllyMode(gameState) end
         elseif key == KEY_Q then
-            -- 发射追踪导弹
-            if gameState then
-                Core.fireMissile(gameState)
-            end
+            if gameState then Core.fireMissile(gameState) end
         elseif key == KEY_V then
-            -- 激光武器开关
-            if gameState then
-                Core.toggleLaser(gameState)
-            end
+            if gameState then Core.toggleLaser(gameState) end
         elseif key == KEY_TAB then
-            -- 切换副武器
-            if gameState then
-                Core.switchSecondary(gameState)
-            end
+            if gameState then Core.switchSecondary(gameState) end
         elseif key == KEY_SPACE then
-            -- 发射副武器
-            if gameState then
-                Core.fireSecondary(gameState)
+            if gameState then Core.fireSecondary(gameState) end
+        elseif key == KEY_E then
+            -- P21.3: E键与神秘地点交互
+            if gameState and mysteryInteractCd <= 0 then
+                Core.checkMysteryInteraction(gameState)
+                mysteryInteractCd = 0.5
             end
         end
     elseif currentState == STATE_TECH then
@@ -373,7 +419,6 @@ function HandleKeyDown(eventType, eventData)
         end
     end
 
-    -- 从菜单进入排行榜/统计
     if currentState == STATE_MENU and key == KEY_L then
         GameAudio.playClick()
         Leaderboard.fetchRankList()
@@ -385,6 +430,53 @@ end
 -- 点击处理
 -- ============================================================================
 function HandleClick(cx, cy)
+    -- P19: 难度选择界面的卡片点击
+    if currentState == STATE_DIFFICULTY then
+        local dpr = graphics:GetDPR()
+        local sw = screenW / dpr
+        local sh = screenH / dpr
+        local cardW = 180
+        local cardH = 260
+        local totalW = 4 * cardW + 3 * 20
+        local startX = sw / 2 - totalW / 2
+        for i = 1, 4 do
+            local cx2 = startX + (i - 1) * (cardW + 20)
+            if cx / dpr > cx2 and cx / dpr < cx2 + cardW and cy / dpr > sh * 0.4 and cy / dpr < sh * 0.4 + cardH then
+                selectedDifficultyIdx = i
+                GameAudio.playClick()
+                currentState = STATE_CAMPAIGN
+                return
+            end
+        end
+        return
+    end
+
+    -- P18: 战役章节选择界面的卡片点击
+    if currentState == STATE_CAMPAIGN then
+        local dpr = graphics:GetDPR()
+        local sw = screenW / dpr
+        local sh = screenH / dpr
+        local cardW = 520
+        local cardH = 110
+        local gap = 20
+        local totalH = 3 * cardH + 2 * gap
+        local startY = sh / 2 - totalH / 2
+        for i = 1, 3 do
+            local cy2 = startY + (i - 1) * (cardH + gap)
+            local cx2 = sw / 2 - cardW / 2
+            if cx / dpr > cx2 and cx / dpr < cx2 + cardW and cy / dpr > cy2 and cy / dpr < cy2 + cardH then
+                local unlocked = (i == 1) or chapterProgress["ch" .. (i - 1)]
+                if unlocked then
+                    selectedChapterIdx = i
+                    GameAudio.playClick()
+                    StartGame()
+                end
+                return
+            end
+        end
+        return
+    end
+
     if currentState == STATE_MENU then
         -- 检测阵营卡片点击（匹配新布局: cardW=130, gap=20, centered）
         local factionIds = { "merchants", "warband", "scholars" }
@@ -403,13 +495,13 @@ function HandleClick(cx, cy)
             end
         end
 
-        -- 检测开始按钮（匹配新布局: btnW=170, btnH=48）
         local btnX = screenW / 2 - 85
         local btnY = screenH * 0.76
         if cx > btnX and cx < btnX + 170 and cy > btnY and cy < btnY + 48 then
             isDailyChallenge = false
             isEndless = false
-            StartGame()
+            GameAudio.playClick()
+            currentState = STATE_DIFFICULTY
         end
 
         -- 每日挑战按钮（开始按钮下方: btnH=48 + gap=16）
@@ -683,9 +775,8 @@ end
 -- 开始游戏
 -- ============================================================================
 function StartGame()
-    -- P9: UI 点击音效
     GameAudio.playClick()
-    -- P8.2: 安全检查 - 确保选中的皮肤已解锁，否则回退到默认
+    -- P8.2: 安全检查 - 确保选中的皮肤已解锁
     local skin = Systems.SHIP_SKINS[selectedSkinIdx]
     if skin and skin.unlock ~= "default" then
         local unlocked = false
@@ -693,15 +784,22 @@ function StartGame()
             if a == skin.unlock then unlocked = true; break end
         end
         if not unlocked then
-            selectedSkinIdx = 1  -- 回退到默认皮肤
+            selectedSkinIdx = 1
         end
     end
 
     gameState = Core.newGame(S.get("default_faction"), selectedFaction, selectedGameMode)
-    -- 重置广告复活状态
+
+    -- P18/P19: 应用难度与战役章节
+    local difficultyIds = { "rookie", "standard", "hard", "void" }
+    gameState.difficultyId = difficultyIds[selectedDifficultyIdx] or "standard"
+    gameState.campaignId = "ch" .. selectedChapterIdx
+    if Core.applyDifficulty then Core.applyDifficulty(gameState) end
+    if Core.applyMetaUpgrades then Core.applyMetaUpgrades(gameState) end
+
     adReviveUsed = false
     showRevivePrompt = false
-    -- P8.1: 注入持久化成就（让本局内可检查历史成就解锁状态）
+
     for _, achId in ipairs(savedAchievements) do
         local found = false
         for _, a in ipairs(gameState.achievements or {}) do
@@ -712,35 +810,27 @@ function StartGame()
             gameState.achievements[#gameState.achievements + 1] = achId
         end
     end
-    -- 应用飞船皮肤颜色
     local skin = Systems.SHIP_SKINS[selectedSkinIdx]
     if skin then
         gameState.shipColor = skin.color
     end
-    -- 无尽模式
     if isEndless then
         gameState.isEndless = true
-        log:Write(LOG_INFO, "[StarSea] Endless mode enabled")
     end
-    -- P11: 游戏模式处理
     if selectedGameMode == "timeattack" then
         gameState.gameMode = "timeattack"
         gameState.timeAttackDuration = 60
-        gameState.dayLength = 9999  -- 不切换天数
-        log:Write(LOG_INFO, "[StarSea] Time Attack mode started")
+        gameState.dayLength = 9999
     elseif selectedGameMode == "bullethell" then
         gameState.gameMode = "bullethell"
         gameState.dayLength = 9999
-        log:Write(LOG_INFO, "[StarSea] Bullet Hell mode started")
     elseif selectedGameMode == "bossrush" then
         gameState.gameMode = "bossrush"
         gameState.dayLength = 9999
         gameState._bossRushIndex = 0
-        log:Write(LOG_INFO, "[StarSea] Boss Rush mode started")
     else
         gameState.gameMode = gameState.isEndless and "endless" or "season"
     end
-    -- 每日挑战修饰符
     if isDailyChallenge then
         gameState.isDailyChallenge = true
         local mods = Systems.getDailyModifiers()
@@ -748,10 +838,11 @@ function StartGame()
         for _, m in ipairs(mods) do
             m.apply(gameState)
         end
-        log:Write(LOG_INFO, "[StarSea] Daily challenge: " .. mods[1].name .. " + " .. mods[2].name)
     end
     currentState = STATE_GAME
-    log:Write(LOG_INFO, "[StarSea] Game started, faction: " .. selectedFaction .. (isEndless and " [ENDLESS]" or ""))
+    log:Write(LOG_INFO, "[StarSea] Started: " .. gameState.difficultyId
+        .. " | ch" .. selectedChapterIdx .. " | faction: " .. selectedFaction
+        .. (isEndless and " [ENDLESS]" or ""))
 end
 
 -- ============================================================================
@@ -772,6 +863,12 @@ function HandleNanoVGRender(eventType, eventData)
 
     if currentState == STATE_MENU then
         Render.drawMenu(vg, sw, sh, selectedFaction, selectedSkinIdx, savedAchievements, dailyChallengeCompleted)
+
+    elseif currentState == STATE_DIFFICULTY then
+        Render.drawDifficultySelect(vg, sw, sh, selectedDifficultyIdx)
+
+    elseif currentState == STATE_CAMPAIGN then
+        Render.drawCampaignSelect(vg, sw, sh, selectedChapterIdx, chapterProgress)
 
     elseif currentState == STATE_SETTINGS then
         Render.drawSettings(vg, sw, sh, settings, settingSliders)

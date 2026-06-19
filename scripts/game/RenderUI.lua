@@ -123,11 +123,137 @@ function M.drawHUD(vg, state, sw, sh)
     -- 副武器HUD（左下，资源上方）
     M.drawSecondaryWeaponHUD(vg, state, sw, sh)
 
+    -- P20.1: 主动技能冷却 HUD（底部中央）
+    if state.skills and state.skills.unlocked then
+        local skills = state.skills
+        local skillList = {
+            { id = "skill_dash", key = "Q", name = "冲刺", color = { 120, 220, 255 } },
+            { id = "skill_shock", key = "W", name = "冲击波", color = { 255, 200, 100 } },
+            { id = "skill_slow", key = "E", name = "减速", color = { 200, 150, 255 } },
+            { id = "skill_shield", key = "R", name = "护盾", color = { 120, 255, 160 } },
+            { id = "skill_strike", key = "T", name = "轨道", color = { 255, 100, 100 } },
+        }
+        local skillBoxW = 48
+        local skillBoxH = 56
+        local totalW = #skillList * skillBoxW + (#skillList - 1) * 8
+        local skillStartX = sw / 2 - totalW / 2
+        local skillY = sh - 120
+        for si, sk in ipairs(skillList) do
+            local unlocked = skills.unlocked[sk.id]
+            local cd = skills.cooldowns[sk.id] or 0
+            local hasCd = cd > 0
+            local sx = skillStartX + (si - 1) * (skillBoxW + 8)
+            -- 背景
+            nvgBeginPath(vg)
+            nvgRoundedRect(vg, sx, skillY, skillBoxW, skillBoxH, 6)
+            if unlocked then
+                nvgFillColor(vg, nvgRGBA(20, 30, 50, 200))
+            else
+                nvgFillColor(vg, nvgRGBA(10, 10, 20, 150))
+            end
+            nvgFill(vg)
+            -- 边框
+            nvgBeginPath(vg)
+            nvgRoundedRect(vg, sx, skillY, skillBoxW, skillBoxH, 6)
+            if hasCd then
+                nvgStrokeColor(vg, nvgRGBA(100, 100, 120, 180))
+            elseif unlocked then
+                nvgStrokeColor(vg, nvgRGBA(sk.color[1], sk.color[2], sk.color[3], 220))
+            else
+                nvgStrokeColor(vg, nvgRGBA(60, 60, 80, 100))
+            end
+            nvgStrokeWidth(vg, 2)
+            nvgStroke(vg)
+            -- 冷却遮罩
+            if hasCd then
+                local def = Data and Data.ACTIVE_SKILLS and Data.getActiveSkill and Data.getActiveSkill(sk.id)
+                local totalCd = def and def.cooldown or 4
+                local ratio = math.min(1, cd / totalCd)
+                nvgBeginPath(vg)
+                nvgRect(vg, sx, skillY + skillBoxH * (1 - ratio), skillBoxW, skillBoxH * ratio)
+                nvgFillColor(vg, nvgRGBA(0, 0, 0, 150))
+                nvgFill(vg)
+            end
+            -- 图标文字
+            nvgFontFace(vg, "sans")
+            nvgFontSize(vg, 16)
+            nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)
+            if unlocked then
+                nvgFillColor(vg, nvgRGBA(sk.color[1], sk.color[2], sk.color[3], 240))
+            else
+                nvgFillColor(vg, nvgRGBA(100, 100, 120, 100))
+            end
+            nvgText(vg, sx + skillBoxW / 2, skillY + 18, sk.key)
+            nvgFontSize(vg, 10)
+            nvgFillColor(vg, nvgRGBA(220, 220, 240, 200))
+            nvgText(vg, sx + skillBoxW / 2, skillY + 36, sk.name)
+            if hasCd then
+                nvgFontSize(vg, 12)
+                nvgFillColor(vg, nvgRGBA(255, 220, 100, 240))
+                nvgText(vg, sx + skillBoxW / 2, skillY + 48, string.format("%.1fs", cd))
+            end
+        end
+    end
+
+    -- P20.2: 连击等级显示（屏幕顶部中央）
+    if state.comboRank and state.comboRank.count and state.comboRank.count > 0 then
+        local cr = state.comboRank
+        local rankName = cr.rank or "C"
+        local rankColor = cr.color or { 180, 180, 180 }
+        nvgFontFace(vg, "sans")
+        nvgFontSize(vg, 28)
+        nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)
+        nvgFillColor(vg, nvgRGBA(rankColor[1], rankColor[2], rankColor[3], 220))
+        nvgText(vg, sw / 2, 80, "RANK " .. rankName)
+        nvgFontSize(vg, 14)
+        nvgFillColor(vg, nvgRGBA(220, 220, 240, 180))
+        nvgText(vg, sw / 2, 102, string.format("× %d 连击", cr.count))
+    end
+
+    -- P21.3: 神秘地点提示（世界地图上的目标点）
+    if state.mysteries then
+        for _, m in ipairs(state.mysteries) do
+            if not m.visited and m.def then
+                local wx = (m.x - state.player.x) * 0.6 + sw / 2
+                local wy = (m.y - state.player.y) * 0.6 + sh / 2
+                local dist2 = math.abs(wx - sw / 2) + math.abs(wy - sh / 2)
+                if dist2 < 200 and wx > 40 and wx < sw - 40 and wy > 40 and wy < sh - 40 then
+                    local pulse = 0.5 + 0.3 * math.sin((menuTime or 0) * 4)
+                    nvgFontFace(vg, "sans")
+                    nvgFontSize(vg, 16)
+                    nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)
+                    nvgFillColor(vg, nvgRGBA(255, 220, 120, math.floor(180 + 60 * pulse)))
+                    nvgText(vg, wx, wy, m.def.icon or "?")
+                    nvgFontSize(vg, 9)
+                    nvgFillColor(vg, nvgRGBA(200, 180, 120, 150))
+                    nvgText(vg, wx, wy + 14, m.def.name)
+                end
+            end
+        end
+    end
+
+    -- P19: 难度等级显示（HP条下方）
+    if state.difficultyId then
+        local diffNames = { rookie = "新手", standard = "标准", hard = "困难", void = "虚空" }
+        local diffColors = {
+            rookie = { 100, 255, 100 },
+            standard = { 100, 180, 255 },
+            hard = { 255, 160, 60 },
+            void = { 220, 60, 220 },
+        }
+        local dc = diffColors[state.difficultyId] or { 200, 200, 200 }
+        nvgFontFace(vg, "sans")
+        nvgFontSize(vg, 10)
+        nvgTextAlign(vg, NVG_ALIGN_LEFT + NVG_ALIGN_TOP)
+        nvgFillColor(vg, nvgRGBA(dc[1], dc[2], dc[3], 180))
+        nvgText(vg, 20, 50, "难度: " .. (diffNames[state.difficultyId] or state.difficultyId))
+    end
+
     -- 操作提示
     nvgFontSize(vg, 10)
     nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_BOTTOM)
     nvgFillColor(vg, nvgRGBA(100, 120, 160, 100))
-    nvgText(vg, sw / 2, sh - 8, "WASD移动 | 左键射击 | Space副武器 | Tab切换 | T科技树 | Q导弹 | V激光")
+    nvgText(vg, sw / 2, sh - 8, "WASD移动 | 左键射击 | 1-5主动技能 | E神秘地点 | Space副武器 | TAB切换 | T科技树 | Q导弹 | R中继站 | V激光")
 
     -- 任务面板（右侧中部）
     M.drawQuestPanel(vg, state, sw, sh)
@@ -1677,6 +1803,187 @@ function M.drawStats(vg, sw, sh, stats)
     nvgFontSize(vg, 12)
     nvgFillColor(vg, nvgRGBA(100, 120, 150, 160))
     nvgText(vg, sw / 2, sh * 0.95, "按 ESC 返回")
+end
+
+-- ============================================================================
+-- P18/P19: 难度选择与战役章节选择
+-- ============================================================================
+function M.drawDifficultySelect(vg, sw, sh, selectedIdx)
+    local difficulties = {
+        { name = "新手", en = "ROOKIE", desc = "舒缓的星海之旅", hpMul = "HP +20%", dmgMul = "DMG +15%", color = { 100, 255, 100 } },
+        { name = "标准", en = "STANDARD", desc = "平衡的挑战与回报", hpMul = "HP ×1.0", dmgMul = "DMG ×1.0", color = { 100, 180, 255 } },
+        { name = "困难", en = "HARD", desc = "敌舰更强更密集", hpMul = "HP ×1.4", dmgMul = "DMG ×1.25", color = { 255, 160, 60 } },
+        { name = "虚空", en = "VOID", desc = "精英中的精英", hpMul = "HP ×1.8", dmgMul = "DMG ×1.6", color = { 220, 60, 220 } },
+    }
+    -- 背景
+    nvgBeginPath(vg)
+    nvgRect(vg, 0, 0, sw, sh)
+    nvgFillColor(vg, nvgRGBA(6, 8, 24, 230))
+    nvgFill(vg)
+    -- 标题
+    nvgFontFace(vg, "sans")
+    nvgFontSize(vg, 32)
+    nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)
+    nvgFillColor(vg, nvgRGBA(220, 230, 255, 240))
+    nvgText(vg, sw / 2, sh * 0.15, "选择难度")
+    nvgFontSize(vg, 12)
+    nvgFillColor(vg, nvgRGBA(140, 160, 200, 200))
+    nvgText(vg, sw / 2, sh * 0.15 + 28, "S E L E C T   D I F F I C U L T Y")
+    -- 难度卡片
+    local cardW = 180
+    local cardH = 260
+    local totalW = #difficulties * cardW + (#difficulties - 1) * 20
+    local startX = sw / 2 - totalW / 2
+    for i, diff in ipairs(difficulties) do
+        local cx = startX + (i - 1) * (cardW + 20)
+        local cy = sh * 0.4
+        local isSelected = selectedIdx == i
+        nvgBeginPath(vg)
+        nvgRoundedRect(vg, cx, cy, cardW, cardH, 8)
+        if isSelected then
+            nvgFillColor(vg, nvgRGBA(diff.color[1] * 0.2, diff.color[2] * 0.2, diff.color[3] * 0.4, 230))
+        else
+            nvgFillColor(vg, nvgRGBA(20, 25, 45, 200))
+        end
+        nvgFill(vg)
+        -- 边框
+        nvgBeginPath(vg)
+        nvgRoundedRect(vg, cx, cy, cardW, cardH, 8)
+        if isSelected then
+            nvgStrokeColor(vg, nvgRGBA(diff.color[1], diff.color[2], diff.color[3], 255))
+            nvgStrokeWidth(vg, 3)
+        else
+            nvgStrokeColor(vg, nvgRGBA(diff.color[1], diff.color[2], diff.color[3], 120))
+            nvgStrokeWidth(vg, 1.5)
+        end
+        nvgStroke(vg)
+        -- 等级名
+        nvgFontSize(vg, 26)
+        nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)
+        nvgFillColor(vg, nvgRGBA(diff.color[1], diff.color[2], diff.color[3], 240))
+        nvgText(vg, cx + cardW / 2, cy + 50, diff.name)
+        nvgFontSize(vg, 11)
+        nvgFillColor(vg, nvgRGBA(200, 210, 230, 180))
+        nvgText(vg, cx + cardW / 2, cy + 76, diff.en)
+        -- 分隔线
+        nvgBeginPath(vg)
+        nvgMoveTo(vg, cx + 30, cy + 100)
+        nvgLineTo(vg, cx + cardW - 30, cy + 100)
+        nvgStrokeColor(vg, nvgRGBA(diff.color[1], diff.color[2], diff.color[3], 80))
+        nvgStrokeWidth(vg, 1)
+        nvgStroke(vg)
+        -- 描述
+        nvgFontSize(vg, 12)
+        nvgFillColor(vg, nvgRGBA(220, 230, 255, 220))
+        nvgText(vg, cx + cardW / 2, cy + 130, diff.desc)
+        nvgFontSize(vg, 11)
+        nvgFillColor(vg, nvgRGBA(255, 200, 120, 200))
+        nvgText(vg, cx + cardW / 2, cy + 170, diff.hpMul)
+        nvgFillColor(vg, nvgRGBA(255, 120, 120, 200))
+        nvgText(vg, cx + cardW / 2, cy + 190, diff.dmgMul)
+        -- 选择标记
+        if isSelected then
+            nvgFontSize(vg, 11)
+            nvgFillColor(vg, nvgRGBA(diff.color[1], diff.color[2], diff.color[3], 240))
+            nvgText(vg, cx + cardW / 2, cy + cardH - 24, "◆ 已选择 ◆")
+        end
+    end
+    -- 操作提示
+    nvgFontSize(vg, 12)
+    nvgFillColor(vg, nvgRGBA(160, 180, 220, 200))
+    nvgText(vg, sw / 2, sh - 60, "← → 选择难度 | Enter 确认 | Esc 返回")
+end
+
+function M.drawCampaignSelect(vg, sw, sh, selectedChapter, chapterProgress)
+    local chapters = {
+        { name = "边境星域", en = "FRONTIER", days = "10 天战役", desc = "建立立足点，击退入侵", boss = "BOSS: 虚空巨兽", color = { 80, 160, 255 }, unlocked = true },
+        { name = "科技禁区", en = "FORBIDDEN ZONE", days = "15 天战役", desc = "穿过旧联邦的实验设施", boss = "BOSS: 核心守护者", color = { 200, 100, 255 }, unlocked = (chapterProgress and chapterProgress.ch1) },
+        { name = "虚空深处", en = "THE VOID", days = "20 天战役", desc = "一切的源头，终末之战", boss = "BOSS: 虚空主宰", color = { 255, 80, 80 }, unlocked = (chapterProgress and chapterProgress.ch2) },
+    }
+    -- 背景
+    nvgBeginPath(vg)
+    nvgRect(vg, 0, 0, sw, sh)
+    nvgFillColor(vg, nvgRGBA(6, 8, 24, 230))
+    nvgFill(vg)
+    -- 标题
+    nvgFontFace(vg, "sans")
+    nvgFontSize(vg, 32)
+    nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)
+    nvgFillColor(vg, nvgRGBA(220, 230, 255, 240))
+    nvgText(vg, sw / 2, sh * 0.12, "战役选择")
+    nvgFontSize(vg, 12)
+    nvgFillColor(vg, nvgRGBA(140, 160, 200, 200))
+    nvgText(vg, sw / 2, sh * 0.12 + 28, "S E L E C T   C A M P A I G N")
+    -- 章节卡片（纵向排列）
+    local cardW = 520
+    local cardH = 110
+    local gap = 20
+    local totalH = #chapters * cardH + (#chapters - 1) * gap
+    local startY = sh / 2 - totalH / 2
+    for i, ch in ipairs(chapters) do
+        local cy = startY + (i - 1) * (cardH + gap)
+        local cx = sw / 2 - cardW / 2
+        local isSelected = selectedChapter == i
+        local isUnlocked = ch.unlocked
+        -- 卡片背景
+        nvgBeginPath(vg)
+        nvgRoundedRect(vg, cx, cy, cardW, cardH, 8)
+        if isUnlocked then
+            if isSelected then
+                nvgFillColor(vg, nvgRGBA(ch.color[1] * 0.15, ch.color[2] * 0.15, ch.color[3] * 0.25, 230))
+            else
+                nvgFillColor(vg, nvgRGBA(18, 24, 42, 210))
+            end
+        else
+            nvgFillColor(vg, nvgRGBA(10, 12, 20, 180))
+        end
+        nvgFill(vg)
+        -- 左侧色条
+        nvgBeginPath(vg)
+        nvgRoundedRect(vg, cx, cy, 8, cardH, 4)
+        nvgFillColor(vg, nvgRGBA(ch.color[1], ch.color[2], ch.color[3], isUnlocked and 240 or 80))
+        nvgFill(vg)
+        -- 边框
+        nvgBeginPath(vg)
+        nvgRoundedRect(vg, cx, cy, cardW, cardH, 8)
+        if isSelected and isUnlocked then
+            nvgStrokeColor(vg, nvgRGBA(ch.color[1], ch.color[2], ch.color[3], 255))
+            nvgStrokeWidth(vg, 3)
+        else
+            nvgStrokeColor(vg, nvgRGBA(ch.color[1], ch.color[2], ch.color[3], isUnlocked and 120 or 40))
+            nvgStrokeWidth(vg, 1.5)
+        end
+        nvgStroke(vg)
+        -- 章节名
+        nvgFontFace(vg, "sans")
+        nvgFontSize(vg, 22)
+        nvgTextAlign(vg, NVG_ALIGN_LEFT + NVG_ALIGN_MIDDLE)
+        nvgFillColor(vg, nvgRGBA(ch.color[1], ch.color[2], ch.color[3], isUnlocked and 240 or 120))
+        nvgText(vg, cx + 28, cy + 30, "第 " .. i .. " 章 · " .. ch.name)
+        nvgFontSize(vg, 10)
+        nvgFillColor(vg, nvgRGBA(200, 210, 230, isUnlocked and 180 or 80))
+        nvgText(vg, cx + 28, cy + 50, ch.en .. " · " .. ch.days)
+        -- 描述
+        nvgFontSize(vg, 12)
+        nvgFillColor(vg, nvgRGBA(220, 230, 255, isUnlocked and 220 or 100))
+        nvgText(vg, cx + 28, cy + 76, ch.desc)
+        -- Boss 信息
+        nvgFontSize(vg, 11)
+        nvgFillColor(vg, nvgRGBA(255, 120, 120, isUnlocked and 180 or 80))
+        nvgText(vg, cx + 28, cy + 96, ch.boss)
+        -- 锁定图标
+        if not isUnlocked then
+            nvgFontSize(vg, 28)
+            nvgTextAlign(vg, NVG_ALIGN_RIGHT + NVG_ALIGN_MIDDLE)
+            nvgFillColor(vg, nvgRGBA(120, 120, 140, 150))
+            nvgText(vg, cx + cardW - 24, cy + cardH / 2, "🔒")
+        end
+    end
+    -- 操作提示
+    nvgFontSize(vg, 12)
+    nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)
+    nvgFillColor(vg, nvgRGBA(160, 180, 220, 200))
+    nvgText(vg, sw / 2, sh - 60, "↑ ↓ 选择章节 | Enter 开始 | Esc 返回")
 end
 
 return M

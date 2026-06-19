@@ -497,6 +497,38 @@ Data.ENEMY_TYPES = {
         score = 200, metal = 3, energy = 4, blueprint = 2,
         behavior = "quantum",  -- 被击杀后分裂为2个小敌人
     },
+    fighter = {
+        name = "战斗舰",
+        hp = 120, speed = 100, size = 16,
+        fire = 1.0, dmg = 12, range = 320,
+        color = { 255, 180, 80 },
+        score = 150, metal = 3, energy = 3, blueprint = 1,
+        behavior = "fighter",
+    },
+    cruiser = {
+        name = "重型巡洋舰",
+        hp = 280, speed = 55, size = 24,
+        fire = 1.6, dmg = 20, range = 380,
+        color = { 220, 220, 180 },
+        score = 300, metal = 7, energy = 5, blueprint = 2,
+        behavior = "cruiser",
+    },
+    phasePhaser = {
+        name = "相位潜行者",
+        hp = 90, speed = 110, size = 14,
+        fire = 2.2, dmg = 16, range = 300,
+        color = { 180, 120, 255 },
+        score = 240, metal = 3, energy = 4, blueprint = 2,
+        behavior = "phase",
+    },
+    energyLeech = {
+        name = "能量吸取者",
+        hp = 150, speed = 90, size = 18,
+        fire = 1.4, dmg = 14, range = 280,
+        color = { 100, 255, 150 },
+        score = 260, metal = 2, energy = 6, blueprint = 2,
+        behavior = "leech",
+    },
 }
 
 -- ============================================================================
@@ -889,5 +921,586 @@ Data.WORLD = {
     middleR = 1500, -- 中环外边界 (湍流区)
     outerR = 2400,  -- 外环边界 (碎片浅滩-安全区)
 }
+
+-- ============================================================================
+-- P18.1: 战役模式章节定义
+-- ============================================================================
+Data.CAMPAIGN = {
+    {
+        id = "ch1",
+        title = "第一章 · 边境星域",
+        titleEn = "Chapter 1 · Frontier",
+        description = "星海联邦的边缘防线正遭受侵蚀。作为新晋指挥官，你必须在资源匮乏的边境站稳脚跟，击退第一波入侵。",
+        days = 10,
+        recommendedDays = 15,
+        themeColor = { 80, 160, 255 },
+        bossId = "void_leviathan",
+        unlockRequires = nil,
+        objectives = {
+            { id = "survive10", type = "survive", target = 10, desc = "生存10天" },
+            { id = "kill50", type = "kill", target = 50, desc = "击毁50艘敌舰" },
+            { id = "collectMetal", type = "resource", target = 300, desc = "累计收集300金属" },
+        },
+        zoneId = "frontier",
+    },
+    {
+        id = "ch2",
+        title = "第二章 · 科技禁区",
+        titleEn = "Chapter 2 · Forbidden Zone",
+        description = "曾是联邦最机密的研究设施，如今已被未知能量污染。残存的自动防御系统将任何靠近者视为敌人。",
+        days = 15,
+        recommendedDays = 25,
+        themeColor = { 200, 100, 255 },
+        bossId = "corrupted_core",
+        unlockRequires = { chapter = "ch1" },
+        objectives = {
+            { id = "survive25", type = "survive", target = 25, desc = "生存25天" },
+            { id = "killBosses", type = "bossKill", target = 3, desc = "击败3名Boss" },
+            { id = "techCount", type = "tech", target = 10, desc = "解锁10项科技" },
+        },
+        zoneId = "forbidden",
+    },
+    {
+        id = "ch3",
+        title = "第三章 · 虚空深处",
+        titleEn = "Chapter 3 · The Void",
+        description = "敌舰的源头——一片吞噬光与物质的扭曲空间。最终决战将在这里打响，你要面对的是来自虚空本身的意志。",
+        days = 20,
+        recommendedDays = 45,
+        themeColor = { 255, 80, 80 },
+        bossId = "void_overlord",
+        unlockRequires = { chapter = "ch2" },
+        objectives = {
+            { id = "survive45", type = "survive", target = 45, desc = "生存45天" },
+            { id = "maxCombo", type = "comboMax", target = 20, desc = "达成20连击" },
+            { id = "relicCount", type = "relic", target = 8, desc = "收集8件遗物" },
+        },
+        zoneId = "void",
+    },
+}
+
+function Data.getCampaignChapter(id)
+    for _, ch in ipairs(Data.CAMPAIGN) do
+        if ch.id == id then return ch end
+    end
+    return nil
+end
+
+-- ============================================================================
+-- P19.1: 难度等级系统
+-- ============================================================================
+Data.DIFFICULTY_LEVELS = {
+    {
+        id = "rookie",
+        name = "新手",
+        nameEn = "ROOKIE",
+        color = { 100, 255, 100 },
+        desc = "舒缓的星海之旅，专注于探索与故事。",
+        descEn = "A relaxed journey. Focus on exploration and story.",
+        multipliers = {
+            enemyHp = 0.7, enemyDmg = 0.6, enemySpeed = 0.85,
+            spawnRate = 0.75, resourceGain = 1.3, blueprintGain = 1.2,
+            playerDmg = 1.15, playerHp = 1.2,
+        },
+        unlockFlag = nil,
+        metaXpGain = 1.0,
+    },
+    {
+        id = "standard",
+        name = "标准",
+        nameEn = "STANDARD",
+        color = { 100, 180, 255 },
+        desc = "默认体验：平衡的挑战与回报。",
+        descEn = "Default experience. Balanced challenge and reward.",
+        multipliers = {
+            enemyHp = 1.0, enemyDmg = 1.0, enemySpeed = 1.0,
+            spawnRate = 1.0, resourceGain = 1.0, blueprintGain = 1.0,
+            playerDmg = 1.0, playerHp = 1.0,
+        },
+        unlockFlag = nil,
+        metaXpGain = 1.0,
+    },
+    {
+        id = "hard",
+        name = "困难",
+        nameEn = "HARD",
+        color = { 255, 160, 60 },
+        desc = "敌舰更强更密集，资源更珍贵。献给追求挑战的指挥官。",
+        descEn = "Stronger enemies, scarcer resources. For commanders seeking challenge.",
+        multipliers = {
+            enemyHp = 1.35, enemyDmg = 1.25, enemySpeed = 1.1,
+            spawnRate = 1.2, resourceGain = 0.85, blueprintGain = 0.8,
+            playerDmg = 1.0, playerHp = 0.9,
+        },
+        unlockFlag = { completedCh1 = true },
+        metaXpGain = 1.5,
+    },
+    {
+        id = "void",
+        name = "虚空",
+        nameEn = "VOID",
+        color = { 220, 60, 220 },
+        desc = "只有精英中的精英才能生还。一击失误，即是毁灭。",
+        descEn = "Only the elite survive. One mistake, one death.",
+        multipliers = {
+            enemyHp = 1.8, enemyDmg = 1.6, enemySpeed = 1.2,
+            spawnRate = 1.4, resourceGain = 0.7, blueprintGain = 0.6,
+            playerDmg = 1.1, playerHp = 0.75,
+        },
+        unlockFlag = { completedCh2 = true, hardClear = true },
+        metaXpGain = 2.5,
+    },
+}
+
+function Data.getDifficultyLevel(id)
+    for _, d in ipairs(Data.DIFFICULTY_LEVELS) do
+        if d.id == id then return d end
+    end
+    return Data.DIFFICULTY_LEVELS[2]
+end
+
+-- ============================================================================
+-- P19.2: 永久升级（元进度系统）
+-- ============================================================================
+Data.META_UPGRADES = {
+    {
+        id = "meta_hull",
+        name = "舰体强化",
+        icon = "🛡",
+        maxLevel = 5,
+        baseCost = 50,
+        costGrowth = 1.5,
+        desc = "每级最大生命 +10%",
+        apply = function(state, lvl)
+            state.stats.maxHpBonus = (state.stats.maxHpBonus or 1) * (1 + 0.10 * lvl)
+        end,
+    },
+    {
+        id = "meta_weapon",
+        name = "武器校准",
+        icon = "⚔",
+        maxLevel = 5,
+        baseCost = 50,
+        costGrowth = 1.5,
+        desc = "每级主武器伤害 +5%",
+        apply = function(state, lvl)
+            state.stats.dmgBonus = (state.stats.dmgBonus or 1) * (1 + 0.05 * lvl)
+        end,
+    },
+    {
+        id = "meta_reactor",
+        name = "反应堆优化",
+        icon = "⚡",
+        maxLevel = 5,
+        baseCost = 50,
+        costGrowth = 1.5,
+        desc = "每级能量回复 +8%",
+        apply = function(state, lvl)
+            state.stats.energyRegenBonus = (state.stats.energyRegenBonus or 1) * (1 + 0.08 * lvl)
+        end,
+    },
+    {
+        id = "meta_scanner",
+        name = "扫描阵列",
+        icon = "📡",
+        maxLevel = 3,
+        baseCost = 80,
+        costGrowth = 1.8,
+        desc = "每级资源掉落 +10%",
+        apply = function(state, lvl)
+            state.stats.resourceBonus = (state.stats.resourceBonus or 1) * (1 + 0.10 * lvl)
+        end,
+    },
+    {
+        id = "meta_shield",
+        name = "护盾矩阵",
+        icon = "🔷",
+        maxLevel = 3,
+        baseCost = 100,
+        costGrowth = 1.8,
+        desc = "每级开局护盾充能 +1 层",
+        apply = function(state, lvl)
+            state.stats.startingShields = (state.stats.startingShields or 0) + lvl
+        end,
+    },
+    {
+        id = "meta_cargo",
+        name = "货舱扩展",
+        icon = "📦",
+        maxLevel = 3,
+        baseCost = 70,
+        costGrowth = 1.6,
+        desc = "每级额外遗物槽 +1",
+        apply = function(state, lvl)
+            state.stats.extraRelicSlots = (state.stats.extraRelicSlots or 0) + lvl
+        end,
+    },
+}
+
+function Data.getMetaUpgrade(id)
+    for _, m in ipairs(Data.META_UPGRADES) do
+        if m.id == id then return m end
+    end
+    return nil
+end
+
+function Data.metaUpgradeCost(u, currentLvl)
+    return math.floor(u.baseCost * (u.costGrowth ^ currentLvl))
+end
+
+-- ============================================================================
+-- P20.1: 主动技能系统
+-- ============================================================================
+Data.ACTIVE_SKILLS = {
+    {
+        id = "skill_dash",
+        name = "量子冲刺",
+        key = "Q",
+        energyCost = 30,
+        cooldown = 2.0,
+        desc = "向当前移动方向瞬移200距离，获得0.8秒无敌。",
+        color = { 120, 220, 255 },
+        icon = "➤",
+    },
+    {
+        id = "skill_shock",
+        name = "冲击波",
+        key = "W",
+        energyCost = 50,
+        cooldown = 4.0,
+        desc = "释放环形能量波，对范围内敌人造成60伤害并击退。",
+        color = { 255, 200, 100 },
+        icon = "◎",
+        range = 220,
+        damage = 60,
+    },
+    {
+        id = "skill_slow",
+        name = "时间减速",
+        key = "E",
+        energyCost = 70,
+        cooldown = 8.0,
+        desc = "扭曲局部时间，所有敌人减速50%，持续4秒。",
+        color = { 200, 150, 255 },
+        icon = "⏳",
+        duration = 4.0,
+        slowFactor = 0.5,
+    },
+    {
+        id = "skill_shield",
+        name = "护盾充能",
+        key = "R",
+        energyCost = 40,
+        cooldown = 6.0,
+        desc = "立即回复25最大生命，获得1层临时护盾持续3秒。",
+        color = { 120, 255, 160 },
+        icon = "🛡",
+        healAmount = 25,
+        shieldDuration = 3.0,
+    },
+    {
+        id = "skill_strike",
+        name = "轨道打击",
+        key = "T",
+        energyCost = 80,
+        cooldown = 12.0,
+        desc = "呼叫轨道炮，在鼠标位置落下毁灭性一击，造成200范围伤害。",
+        color = { 255, 100, 100 },
+        icon = "☄",
+        range = 180,
+        damage = 200,
+    },
+}
+
+function Data.getActiveSkill(id)
+    for _, s in ipairs(Data.ACTIVE_SKILLS) do
+        if s.id == id then return s end
+    end
+    return nil
+end
+
+-- ============================================================================
+-- P20.2: 连击等级视觉与奖励
+-- ============================================================================
+Data.COMBO_RANKS = {
+    { rank = "C",   threshold = 0,  color = { 180, 180, 180 }, dmgMul = 1.00, spawnMul = 1.0 },
+    { rank = "B",   threshold = 5,  color = { 100, 220, 120 }, dmgMul = 1.08, spawnMul = 1.0 },
+    { rank = "A",   threshold = 10, color = { 100, 180, 255 }, dmgMul = 1.15, spawnMul = 1.1 },
+    { rank = "S",   threshold = 15, color = { 255, 200, 80 },  dmgMul = 1.25, spawnMul = 1.2 },
+    { rank = "SS",  threshold = 25, color = { 255, 120, 80 },  dmgMul = 1.40, spawnMul = 1.35 },
+    { rank = "SSS", threshold = 40, color = { 255, 80, 200 },  dmgMul = 1.60, spawnMul = 1.5 },
+}
+
+function Data.getComboRank(comboCount)
+    local rank = Data.COMBO_RANKS[1]
+    for _, r in ipairs(Data.COMBO_RANKS) do
+        if comboCount >= r.threshold then rank = r end
+    end
+    return rank
+end
+
+-- ============================================================================
+-- P21.1: 世界区域定义
+-- ============================================================================
+Data.ZONES = {
+    frontier = {
+        id = "frontier",
+        name = "边境星域",
+        nameEn = "Frontier Sector",
+        color = { 80, 160, 255 },
+        bgTint = { 20, 25, 45 },
+        starDensity = 1.0,
+        asteroidRate = 1.0,
+        enemyComposition = { drone = 0.6, fighter = 0.3, cruiser = 0.1 },
+        maxEnemies = 12,
+        description = "远离核心的防御前线，适合新手指挥官建立自信。",
+    },
+    forbidden = {
+        id = "forbidden",
+        name = "科技禁区",
+        nameEn = "Forbidden Zone",
+        color = { 200, 100, 255 },
+        bgTint = { 35, 15, 55 },
+        starDensity = 1.3,
+        asteroidRate = 0.8,
+        enemyComposition = { drone = 0.3, fighter = 0.4, cruiser = 0.2, phasePhaser = 0.1 },
+        maxEnemies = 16,
+        description = "被未知能量污染的旧联邦实验区，敌人更强大且种类更多。",
+    },
+    void = {
+        id = "void",
+        name = "虚空深处",
+        nameEn = "The Void",
+        color = { 255, 80, 80 },
+        bgTint = { 40, 10, 30 },
+        starDensity = 1.6,
+        asteroidRate = 0.5,
+        enemyComposition = { fighter = 0.3, cruiser = 0.3, phasePhaser = 0.2, energyLeech = 0.2 },
+        maxEnemies = 20,
+        description = "敌舰的源头——吞噬一切的扭曲空间，生存即是胜利。",
+    },
+    core = {
+        id = "core",
+        name = "核心战区",
+        nameEn = "Core Warzone",
+        color = { 255, 200, 80 },
+        bgTint = { 50, 30, 15 },
+        starDensity = 2.0,
+        asteroidRate = 0.3,
+        enemyComposition = { cruiser = 0.4, phasePhaser = 0.3, energyLeech = 0.3 },
+        maxEnemies = 25,
+        description = "星海联邦的心脏地带。只有最精锐的部队才被部署于此。",
+    },
+}
+
+function Data.getZone(id)
+    return Data.ZONES[id] or Data.ZONES.frontier
+end
+
+-- ============================================================================
+-- P21.2: 波次系统升级 - 定时波次
+-- ============================================================================
+Data.WAVE_PATTERNS = {
+    {
+        id = "wave_swarm",
+        name = "蜂群袭击",
+        nameEn = "Swarm Attack",
+        duration = 30,
+        description = "无人机如蝗虫般出现，考验你清理弱小目标的能力。",
+        enemyType = "drone",
+        enemyCount = 20,
+        spawnInterval = 0.8,
+        reward = { metal = 80, energy = 60 },
+    },
+    {
+        id = "wave_elite",
+        name = "精英部队",
+        nameEn = "Elite Force",
+        duration = 45,
+        description = "一小队精锐战斗机出现在战场上，装备更强护盾。",
+        enemyType = "fighter",
+        enemyCount = 8,
+        spawnInterval = 2.5,
+        reward = { metal = 100, energy = 80, blueprint = 1 },
+    },
+    {
+        id = "wave_besiege",
+        name = "围困战",
+        nameEn = "Siege",
+        duration = 60,
+        description = "混合编队包围你——小心从各个方向逼近的威胁。",
+        enemyType = "mixed",
+        enemyCount = 15,
+        spawnInterval = 2.0,
+        reward = { metal = 150, energy = 120 },
+    },
+    {
+        id = "wave_boss",
+        name = "Boss 降临",
+        nameEn = "Boss Descends",
+        duration = 0,
+        description = "一名强大的敌人出现了——击败它获得丰厚奖励。",
+        isBoss = true,
+        reward = { metal = 300, energy = 250, blueprint = 3 },
+    },
+    {
+        id = "wave_calm",
+        name = "寂静时刻",
+        nameEn = "Calm Moment",
+        duration = 20,
+        description = "战斗暂时平息——是喘息，是补给，也可能是陷阱。",
+        enemyCount = 0,
+        spawnInterval = 0,
+        reward = { metal = 30, energy = 30 },
+        mysteryChance = 0.6,
+    },
+}
+
+function Data.getRandomWavePattern(rng)
+    local r = (rng or math.random)()
+    if r < 0.35 then return Data.WAVE_PATTERNS[1]
+    elseif r < 0.65 then return Data.WAVE_PATTERNS[2]
+    elseif r < 0.85 then return Data.WAVE_PATTERNS[3]
+    else return Data.WAVE_PATTERNS[5]
+    end
+end
+
+-- ============================================================================
+-- P21.3: 神秘地点
+-- ============================================================================
+Data.MYSTERY_LOCATIONS = {
+    {
+        id = "myst_wreck",
+        name = "失事舰骸",
+        icon = "🚀",
+        description = "一艘受损的联邦飞船仍在发送求救信号。靠近它可能有意外收获——或者危险。",
+        onVisit = function(state)
+            local r = math.random()
+            if r < 0.6 then
+                local metal = math.random(50, 120)
+                local energy = math.random(30, 80)
+                Core.dropResources(state, state.player.x, state.player.y, metal, energy, math.random(0, 2))
+                Core.addToast(state, "你从残骸中回收了物资！", { 150, 255, 150 })
+            elseif r < 0.9 then
+                local blueprint = math.random(1, 3)
+                Core.dropResources(state, state.player.x, state.player.y, 0, 0, blueprint)
+                Core.addToast(state, "蓝图！废弃飞船的设计图。", { 150, 200, 255 })
+            else
+                Core.damagePlayer(state, math.random(15, 35), state.player.x, state.player.y)
+                Core.addToast(state, "残骸中潜伏的伏击者！", { 255, 120, 120 })
+                for i = 1, 5 do Core.spawnEnemy(state, "drone") end
+            end
+        end,
+    },
+    {
+        id = "myst_signal",
+        name = "神秘信号",
+        icon = "📡",
+        description = "未知频率的信号不断重复着相同的代码。解码它也许能发现什么。",
+        onVisit = function(state)
+            state.player.blueprints = (state.player.blueprints or 0) + 2
+            Core.addToast(state, "你解码了信号，获得2蓝图！", { 150, 200, 255 })
+            if not state.flags.decodedSignal then
+                state.flags.decodedSignal = true
+                Core.unlockTech(state, "w10")
+                Core.addToast(state, "隐藏科技解锁：量子隐身！", { 200, 150, 255 })
+            end
+        end,
+    },
+    {
+        id = "myst_anomaly",
+        name = "时空异常",
+        icon = "🌀",
+        description = "空间在此处出现了可见的扭曲。进入可能会——改变某些东西。",
+        onVisit = function(state)
+            local r = math.random()
+            if r < 0.5 then
+                state.player.hp = math.min(state.player.maxHp, state.player.hp + 40)
+                Core.addToast(state, "异常能量修复了你的舰体！", { 150, 255, 200 })
+            elseif r < 0.8 then
+                state.stats.tempDmgMul = (state.stats.tempDmgMul or 1) + 0.2
+                Core.addToast(state, "舰体共振，伤害临时 +20%！", { 255, 200, 100 })
+            else
+                state.player.energy = state.player.maxEnergy
+                Core.addToast(state, "能量场充满了反应堆！", { 120, 200, 255 })
+            end
+        end,
+    },
+    {
+        id = "myst_trader",
+        name = "流浪商人",
+        icon = "🛒",
+        description = "一位自称商人的飞船示意你靠近。他的报价——公道，或者荒诞。",
+        onVisit = function(state)
+            if (state.player.metal or 0) >= 100 then
+                state.player.metal = state.player.metal - 100
+                state.player.blueprints = (state.player.blueprints or 0) + 3
+                Core.addToast(state, "交易达成：100金属 换 3蓝图", { 220, 220, 140 })
+            else
+                Core.addToast(state, "金属不足（需100），商人离开了。", { 180, 180, 180 })
+            end
+        end,
+    },
+    {
+        id = "myst_relic",
+        name = "遗物碎片",
+        icon = "💎",
+        description = "一块散发奇异光辉的碎片。它的能量特征与你曾获得的遗物相似。",
+        onVisit = function(state)
+            if not state.flags.relicShard then
+                state.flags.relicShard = true
+                local relic = Data.RELICS[math.random(#Data.RELICS)]
+                if relic then
+                    table.insert(state.player.relics, relic)
+                    Core.addToast(state, "获得遗物：" .. relic.name, { 255, 200, 255 })
+                end
+            else
+                Core.dropResources(state, state.player.x, state.player.y, 0, 100, 1)
+                Core.addToast(state, "又一块碎片转化为能量与蓝图。", { 200, 200, 150 })
+            end
+        end,
+    },
+}
+
+-- ============================================================================
+-- P12.4: NPC 对话与编年史
+-- ============================================================================
+Data.NPC_DIALOGUE = {
+    commander = {
+        name = "指挥官 · 艾琳·霍尔特",
+        avatar = "👤",
+        lines = {
+            "指挥官，我们的前线正在收缩。你能守住阵地吗？",
+            "我已经派遣了补给舰，但敌人的拦截越来越频繁。",
+            "记住：你收集的每一份蓝图都是未来胜利的种子。",
+            "敌人的Boss正在觉醒——你必须在它完成准备前做好准备。",
+        },
+    },
+    engineer = {
+        name = "工程师 · 卡尔",
+        avatar = "🔧",
+        lines = {
+            "反应堆状态良好，但你要是再乱用护盾就不一定了。",
+            "新武器系统已经校准完成——试试它的威力吧！",
+            "我在残骸中发现了有趣的东西——如果你带回来更多，我们能造更强的装备。",
+        },
+    },
+    scout = {
+        name = "侦察兵 · 夜枭",
+        avatar = "🦉",
+        lines = {
+            "我看到了——敌人的动向正在变化，有什么大事要发生。",
+            "前方区域出现了异常能量读数。你应该去看看。",
+            "那片扭曲空间不自然。它——它在吞噬什么东西。",
+        },
+    },
+}
+
+function Data.getNPCLine(npcId, index)
+    local npc = Data.NPC_DIALOGUE[npcId]
+    if not npc then return nil end
+    local i = ((index or 0) % #npc.lines) + 1
+    return npc.lines[i], npc
+end
 
 return Data
