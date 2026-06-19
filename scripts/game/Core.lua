@@ -50,6 +50,7 @@ function Core.newGame(playerName, factionId)
         day = 1, dayTimer = 0, dayLength = 22,
         score = 0, seasonOver = false,
         isEndless = false, -- P7.2 无尽模式标志
+        seasonTheme = Data.getCurrentSeasonTheme(), -- 赛季主题
         -- 资源
         resources = { metal = 0, energy = 0, blueprint = 0, ancient_key = 0 },
         -- 科技
@@ -72,6 +73,10 @@ function Core.newGame(playerName, factionId)
         bossesSpawned = {},
         completedQuests = {},
         relayStations = {},
+        -- 叙事系统
+        narrativeText = nil,      -- 当前叙事文本
+        narrativeTimer = 0,       -- 叙事显示计时
+        narrativeShown = {},      -- 已显示过的任务叙事
         relayCount = 0,
         -- 杂项
         name = playerName or "征途者",
@@ -302,6 +307,13 @@ function Core.update(state, dt, inputState)
     World.updateTutorial(state, dt)
     Core.updateToasts(state, dt)
     Core.updateFloatingTexts(state, dt)
+    -- 叙事文本衰减
+    if state.narrativeTimer and state.narrativeTimer > 0 then
+        state.narrativeTimer = state.narrativeTimer - dt
+        if state.narrativeTimer <= 0 then
+            state.narrativeText = nil
+        end
+    end
     Combat.checkCollisions(state, Core)
 
     -- === 编排器内联逻辑 ===

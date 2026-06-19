@@ -13,6 +13,19 @@ local rand, randInt, dist, lerp, clamp, angleToward, TAU =
 
 local Combat = {}
 
+-- 计算敌人实际受到的伤害（护卫队长光环减伤）
+local function calcEnemyDmg(e, rawDmg)
+    -- 护卫队长自身减伤
+    if e.cfg and e.cfg.shieldBlock then
+        return math.floor(rawDmg * (1 - e.cfg.shieldBlock))
+    end
+    -- 被护卫队长光环保护的友军减伤
+    if e.shielded and (e.shieldedTimer or 0) > 0 then
+        return math.floor(rawDmg * 0.6)  -- 受保护时减伤40%
+    end
+    return rawDmg
+end
+
 -- ============================================================================
 -- 子弹更新
 -- ============================================================================
@@ -77,13 +90,14 @@ function Combat.checkCollisions(state, Core)
                     Core.addFloatingText(state, e.x, e.y - 14, "偏转!", { 80, 180, 255 }, 0.6)
                     goto nextBullet
                 end
-                e.hp = e.hp - b.dmg
+                local actualDmg = calcEnemyDmg(e, b.dmg)
+                e.hp = e.hp - actualDmg
                 e.hitFlash = 0.12
                 -- 伤害统计
-                state.totalDmgDealt = state.totalDmgDealt + b.dmg
+                state.totalDmgDealt = state.totalDmgDealt + actualDmg
                 -- 遗物：生命汲取
                 if Systems.hasRelic(state, "r_lifesteal") then
-                    local heal = math.max(1, math.floor(b.dmg * 0.10))
+                    local heal = math.max(1, math.floor(actualDmg * 0.10))
                     p.hp = math.min(p.hp + heal, p.hpMax or 100)
                 end
                 Core.spawnParticles(state, b.x, b.y, e.cfg.color, 3)

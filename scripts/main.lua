@@ -37,6 +37,7 @@ local gameState = nil
 local selectedFaction = "merchants"
 local selectedSkinIdx = 1       -- 飞船皮肤索引
 local isDailyChallenge = false  -- 当前是否每日挑战模式
+local isWeeklyChallenge = false -- 当前是否每周挑战模式
 local isEndless = false         -- 当前是否无尽模式
 local dailyChallengeCompleted = false  -- P8.3: 今日挑战是否已完成
 local dailyChallengeScore = 0          -- P8.3: 今日挑战分数
@@ -56,6 +57,12 @@ local mouseJustPressed = false
 local adReviveUsed = false       -- 本局是否已使用过广告复活
 local showRevivePrompt = false   -- 是否显示复活提示
 local reviveCountdown = 10.0     -- 复活倒计时（秒）
+
+-- 永久升级系统
+local playerUpgrades = Systems.initUpgrades()  -- 升级等级表
+local starDust = 0                             -- 星尘（升级货币）
+local STATE_UPGRADE = "upgrade"                -- 升级界面状态
+local adDoubleUsed = false                     -- 本局是否已使用广告双倍星尘
 
 -- ============================================================================
 -- Start() - 引擎入口
@@ -106,8 +113,11 @@ function Start()
         persistentStats = restored.stats
         savedAchievements = restored.achievements
         selectedSkinIdx = restored.selectedSkin
+        playerUpgrades = restored.upgrades
+        starDust = restored.starDust
         log:Write(LOG_INFO, "[SaveSystem] Restored: games=" .. persistentStats.totalGames
-            .. " achievements=" .. #savedAchievements .. " skin=" .. selectedSkinIdx)
+            .. " achievements=" .. #savedAchievements .. " skin=" .. selectedSkinIdx
+            .. " starDust=" .. starDust)
     end
 
     -- P8.3: 检查今日是否已完成每日挑战
@@ -216,8 +226,12 @@ function HandleUpdate(eventType, eventData)
                     savedAchievements[#savedAchievements + 1] = achId
                 end
             end
+            -- 发放星尘
+            local earnedDust = Systems.calcStarDust(gameState)
+            starDust = starDust + earnedDust
+            gameState._earnedStarDust = earnedDust  -- 存到state供结算UI显示
             -- P8.1: 保存存档
-            SaveSystem.save(persistentStats, savedAchievements, selectedSkinIdx)
+            SaveSystem.save(persistentStats, savedAchievements, selectedSkinIdx, playerUpgrades, starDust)
             -- 提交分数到云端排行榜
             if gameState.isDailyChallenge then
                 -- P8.3: 每日挑战使用日期key的独立排行榜
@@ -228,12 +242,16 @@ function HandleUpdate(eventType, eventData)
                 dailyChallengeScore = gameState.score
                 -- 保存到存档
                 SaveSystem.saveDailyFlag(os.date("%Y%m%d"), gameState.score)
+            elseif gameState.isWeeklyChallenge then
+                local weekKey = "weekly_" .. math.floor(os.time() / (7 * 24 * 3600))
+                Leaderboard.submitScore(gameState.score, weekKey)
             elseif gameState.isEndless then
                 Leaderboard.submitScore(gameState.score, "endless_score")
             else
                 Leaderboard.submitScore(gameState.score)
             end
             isDailyChallenge = false
+            isWeeklyChallenge = false
             isEndless = false
         end
     end
@@ -351,6 +369,10 @@ function HandleKeyDown(eventType, eventData)
         if key == KEY_ESCAPE then
             currentState = STATE_MENU
         end
+    elseif currentState == STATE_UPGRADE then
+        if key == KEY_ESCAPE then
+            currentState = STATE_MENU
+        end
     end
 
     -- 从菜单进入排行榜/统计
@@ -410,7 +432,20 @@ function HandleClick(cx, cy)
         local endBtnX = screenW / 2 - endBtnW / 2
         if cx > endBtnX and cx < endBtnX + endBtnW and cy > endBtnY and cy < endBtnY + endBtnH3 then
             isDailyChallenge = false
+            isWeeklyChallenge = false
             isEndless = true
+            StartGame()
+        end
+
+        -- 每周挑战按钮（无尽模式按钮下方）
+        local wkBtnY = endBtnY + endBtnH3 + 12
+        local wkBtnW = 140
+        local wkBtnH4 = 36
+        local wkBtnX = screenW / 2 - wkBtnW / 2
+        if cx > wkBtnX and cx < wkBtnX + wkBtnW and cy > wkBtnY and cy < wkBtnY + wkBtnH4 then
+            isDailyChallenge = false
+            isWeeklyChallenge = true
+            isEndless = false
             StartGame()
         end
 
@@ -420,6 +455,14 @@ function HandleClick(cx, cy)
         if cx > statBtnX and cx < statBtnX + 80 and cy > statBtnY and cy < statBtnY + 32 then
             GameAudio.playClick()
             currentState = STATE_STATS
+        end
+
+        -- 升级按钮（右下角）
+        local upgBtnX = screenW - 90
+        local upgBtnY = screenH - 46
+        if cx > upgBtnX and cx < upgBtnX + 80 and cy > upgBtnY and cy < upgBtnY + 32 then
+            GameAudio.playClick()
+            currentState = STATE_UPGRADE
         end
 
         -- 皮肤切换箭头（开始按钮右侧: btnX中心+85+20=105, 箭头在+64偏移处）
@@ -549,9 +592,64 @@ function HandleClick(cx, cy)
         local sh = screenH / dpr
         local lcx = cx / dpr
         local lcy = cy / dpr
+
+        -- 广告双倍星尘按钮
+        if not adDoubleUsed and gameState and (gameState._earnedStarDust or 0) > 0 then
+            local adBtnW = 130
+            local adBtnH = 28
+            local adBtnX = (sw - adBtnW) / 2
+            local adBtnY = sh * 0.79 + 10
+            if lcx > adBtnX and lcx < adBtnX + adBtnW and lcy > adBtnY and lcy < adBtnY + adBtnH then
+                GameAudio.playClick()
+                ---@diagnostic disable-next-line: undefined-global
+                sdk:ShowRewardVideoAd(function(result)
+                    if result.success then
+                        local bonus = gameState._earnedStarDust or 0
+                        starDust = starDust + bonus
+                        gameState._earnedStarDust = bonus * 2  -- 更新显示为翻倍后的值
+                        adDoubleUsed = true
+                        SaveSystem.save(persistentStats, savedAchievements, selectedSkinIdx, playerUpgrades, starDust)
+                        log:Write(LOG_INFO, "[StarSea] Ad double: +" .. bonus .. " starDust")
+                    end
+                end)
+                return
+            end
+        end
+
         local btnX = sw / 2 - 70
         local btnY = sh * 0.84
         if lcx > btnX and lcx < btnX + 140 and lcy > btnY and lcy < btnY + 36 then
+            GameAudio.playClick()
+            currentState = STATE_MENU
+        end
+
+    elseif currentState == STATE_UPGRADE then
+        local dpr = graphics:GetDPR()
+        local sw = screenW / dpr
+        local lcx = cx / dpr
+        local lcy = cy / dpr
+        local startY = 80
+        local itemH = 52
+        local listW = math.min(sw * 0.85, 340)
+        local listX = (sw - listW) / 2
+
+        -- 点击升级项
+        for i, def in ipairs(Systems.UPGRADES) do
+            local y = startY + (i - 1) * itemH
+            if lcx > listX and lcx < listX + listW and lcy > y and lcy < y + itemH - 4 then
+                local success, newDust = Systems.buyUpgrade(def.id, playerUpgrades, starDust)
+                if success then
+                    starDust = newDust
+                    GameAudio.playClick()
+                    SaveSystem.save(persistentStats, savedAchievements, selectedSkinIdx, playerUpgrades, starDust)
+                end
+                return
+            end
+        end
+
+        -- 返回按钮
+        local backY = startY + #Systems.UPGRADES * itemH + 10
+        if lcx > sw / 2 - 50 and lcx < sw / 2 + 50 and lcy > backY and lcy < backY + 32 then
             GameAudio.playClick()
             currentState = STATE_MENU
         end
@@ -607,6 +705,9 @@ function StartGame()
     -- 重置广告复活状态
     adReviveUsed = false
     showRevivePrompt = false
+    adDoubleUsed = false
+    -- 应用永久升级
+    Systems.applyUpgrades(gameState, playerUpgrades)
     -- P8.1: 注入持久化成就（让本局内可检查历史成就解锁状态）
     for _, achId in ipairs(savedAchievements) do
         local found = false
@@ -638,6 +739,18 @@ function StartGame()
         end
         log:Write(LOG_INFO, "[StarSea] Daily challenge: " .. mods[1].name .. " + " .. mods[2].name)
     end
+    -- 每周挑战（固定种子 + 增强难度）
+    if isWeeklyChallenge then
+        gameState.isWeeklyChallenge = true
+        -- 使用本周时间戳作为种子确保全服一致
+        local weekSeed = math.floor(os.time() / (7 * 24 * 3600))
+        math.randomseed(weekSeed)
+        -- 每周挑战强化难度
+        gameState.player.hpMax = math.floor(gameState.player.hpMax * 0.8)
+        gameState.player.hp = gameState.player.hpMax
+        gameState.dayLength = 18  -- 更短的天数周期
+        log:Write(LOG_INFO, "[StarSea] Weekly challenge, seed=" .. weekSeed)
+    end
     currentState = STATE_GAME
     log:Write(LOG_INFO, "[StarSea] Game started, faction: " .. selectedFaction .. (isEndless and " [ENDLESS]" or ""))
 end
@@ -662,10 +775,11 @@ function HandleNanoVGRender(eventType, eventData)
         Render.drawMenu(vg, sw, sh, selectedFaction, selectedSkinIdx, savedAchievements, dailyChallengeCompleted)
 
     elseif currentState == STATE_GAME and gameState then
-        -- 清空背景
+        -- 清空背景（使用赛季主题色）
+        local bgC = (gameState.seasonTheme and gameState.seasonTheme.bgColor) or { 8, 10, 20 }
         nvgBeginPath(vg)
         nvgRect(vg, 0, 0, sw, sh)
-        nvgFillColor(vg, nvgRGBA(8, 10, 20, 255))
+        nvgFillColor(vg, nvgRGBA(bgC[1], bgC[2], bgC[3], 255))
         nvgFill(vg)
 
         -- 绘制游戏世界
@@ -710,6 +824,17 @@ function HandleNanoVGRender(eventType, eventData)
         Render.drawRelicSlots(vg, gameState, sw, sh)
         Render.drawAchievementPopups(vg, gameState, sw, sh)
         Render.drawToasts(vg, gameState, sw, sh)
+
+        -- 叙事文本
+        if gameState.narrativeText and gameState.narrativeTimer and gameState.narrativeTimer > 0 then
+            local alpha = math.min(1, gameState.narrativeTimer / 0.5) * math.min(1, (6 - (6 - gameState.narrativeTimer)) / 0.5)
+            alpha = math.floor(alpha * 220)
+            nvgFontFace(vg, "sans")
+            nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)
+            nvgFontSize(vg, 13)
+            nvgFillColor(vg, nvgRGBA(200, 220, 255, alpha))
+            nvgText(vg, sw / 2, sh * 0.18, gameState.narrativeText)
+        end
 
         -- 广告复活弹窗
         if showRevivePrompt then
@@ -801,11 +926,128 @@ function HandleNanoVGRender(eventType, eventData)
     elseif currentState == STATE_OVER and gameState then
         Render.drawGameOver(vg, gameState, sw, sh)
 
+        -- 星尘获得 + 广告双倍按钮（覆盖在结算卡片上）
+        local earnedDust = gameState._earnedStarDust or 0
+        if earnedDust > 0 then
+            nvgFontFace(vg, "sans")
+            nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)
+            nvgFontSize(vg, 12)
+            nvgFillColor(vg, nvgRGBA(255, 220, 80, 220))
+            local dustText = adDoubleUsed
+                and string.format("✦ +%d 星尘 (已翻倍!)", earnedDust)
+                or string.format("✦ +%d 星尘", earnedDust)
+            nvgText(vg, sw / 2, sh * 0.79, dustText)
+
+            -- 未使用双倍时显示广告按钮
+            if not adDoubleUsed then
+                local adBtnW = 130
+                local adBtnH = 28
+                local adBtnX = (sw - adBtnW) / 2
+                local adBtnY = sh * 0.79 + 10
+                nvgBeginPath(vg)
+                nvgRoundedRect(vg, adBtnX, adBtnY, adBtnW, adBtnH, 5)
+                nvgFillColor(vg, nvgRGBA(180, 120, 0, 200))
+                nvgFill(vg)
+                nvgFontSize(vg, 11)
+                nvgFillColor(vg, nvgRGBA(255, 255, 255, 240))
+                nvgText(vg, sw / 2, adBtnY + adBtnH / 2, "▶ 看广告翻倍星尘")
+            end
+        end
+
     elseif currentState == STATE_RANK then
         Render.drawLeaderboard(vg, sw, sh, Leaderboard)
 
     elseif currentState == STATE_STATS then
         Render.drawStats(vg, sw, sh, persistentStats)
+
+    elseif currentState == STATE_UPGRADE then
+        -- 升级界面
+        nvgBeginPath(vg)
+        nvgRect(vg, 0, 0, sw, sh)
+        nvgFillColor(vg, nvgRGBA(5, 8, 18, 245))
+        nvgFill(vg)
+
+        nvgFontFace(vg, "sans")
+        nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)
+        nvgFontSize(vg, 24)
+        nvgFillColor(vg, nvgRGBA(0, 200, 255, 255))
+        nvgText(vg, sw / 2, 30, "⚙ 永久强化")
+
+        -- 星尘显示
+        nvgFontSize(vg, 14)
+        nvgFillColor(vg, nvgRGBA(255, 220, 80, 230))
+        nvgText(vg, sw / 2, 55, "✦ 星尘: " .. starDust)
+
+        -- 升级列表
+        local startY = 80
+        local itemH = 52
+        local listW = math.min(sw * 0.85, 340)
+        local listX = (sw - listW) / 2
+
+        for i, def in ipairs(Systems.UPGRADES) do
+            local y = startY + (i - 1) * itemH
+            local lv = playerUpgrades[def.id] or 0
+            local maxed = lv >= def.maxLv
+            local cost = maxed and 0 or Systems.getUpgradeCost(def, lv)
+            local canBuy = not maxed and starDust >= cost
+
+            -- 背景条
+            nvgBeginPath(vg)
+            nvgRoundedRect(vg, listX, y, listW, itemH - 4, 6)
+            if canBuy then
+                nvgFillColor(vg, nvgRGBA(20, 40, 60, 200))
+            else
+                nvgFillColor(vg, nvgRGBA(15, 20, 30, 200))
+            end
+            nvgFill(vg)
+            nvgStrokeColor(vg, nvgRGBA(40, 80, 120, 120))
+            nvgStrokeWidth(vg, 1)
+            nvgStroke(vg)
+
+            -- 名称
+            nvgTextAlign(vg, NVG_ALIGN_LEFT + NVG_ALIGN_MIDDLE)
+            nvgFontSize(vg, 13)
+            nvgFillColor(vg, nvgRGBA(220, 240, 255, 240))
+            nvgText(vg, listX + 10, y + 14, def.name)
+
+            -- 描述
+            nvgFontSize(vg, 10)
+            nvgFillColor(vg, nvgRGBA(140, 170, 200, 180))
+            nvgText(vg, listX + 10, y + 32, def.desc)
+
+            -- 等级
+            nvgTextAlign(vg, NVG_ALIGN_RIGHT + NVG_ALIGN_MIDDLE)
+            nvgFontSize(vg, 11)
+            if maxed then
+                nvgFillColor(vg, nvgRGBA(0, 255, 200, 200))
+                nvgText(vg, listX + listW - 10, y + 14, "MAX")
+            else
+                nvgFillColor(vg, nvgRGBA(180, 200, 220, 200))
+                nvgText(vg, listX + listW - 10, y + 14, string.format("Lv.%d/%d", lv, def.maxLv))
+            end
+
+            -- 价格/按钮
+            if not maxed then
+                nvgFontSize(vg, 10)
+                if canBuy then
+                    nvgFillColor(vg, nvgRGBA(255, 220, 80, 220))
+                else
+                    nvgFillColor(vg, nvgRGBA(100, 100, 120, 180))
+                end
+                nvgText(vg, listX + listW - 10, y + 34, "✦" .. cost)
+            end
+        end
+
+        -- 返回按钮
+        nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)
+        local backY = startY + #Systems.UPGRADES * itemH + 10
+        nvgBeginPath(vg)
+        nvgRoundedRect(vg, sw / 2 - 50, backY, 100, 32, 6)
+        nvgFillColor(vg, nvgRGBA(60, 60, 80, 200))
+        nvgFill(vg)
+        nvgFontSize(vg, 13)
+        nvgFillColor(vg, nvgRGBA(200, 210, 230, 220))
+        nvgText(vg, sw / 2, backY + 16, "← 返回")
     end
 
     nvgEndFrame(vg)

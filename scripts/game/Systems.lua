@@ -615,4 +615,88 @@ function Systems.updatePersistentStats(pStats, gameState)
     pStats.totalEnergyCollected = pStats.totalEnergyCollected + (gameState.totalCollected and gameState.totalCollected.energy or 0)
 end
 
+-- ============================================================================
+-- 永久升级系统（跨局持久化强化）
+-- ============================================================================
+Systems.UPGRADES = {
+    { id = "u_hp",       name = "船体强化",   desc = "初始HP+10",       maxLv = 10, costBase = 100,  costScale = 1.5, effect = "hp",        perLv = 10 },
+    { id = "u_shield",   name = "护盾改造",   desc = "初始护盾+15",     maxLv = 8,  costBase = 150,  costScale = 1.5, effect = "shield",    perLv = 15 },
+    { id = "u_dmg",      name = "武器校准",   desc = "伤害+5%",         maxLv = 8,  costBase = 200,  costScale = 1.6, effect = "dmg",       perLv = 0.05 },
+    { id = "u_speed",    name = "引擎调校",   desc = "移动速度+4%",     maxLv = 6,  costBase = 120,  costScale = 1.4, effect = "speed",     perLv = 0.04 },
+    { id = "u_firerate", name = "射速增幅",   desc = "射速+5%",         maxLv = 6,  costBase = 180,  costScale = 1.5, effect = "firerate",  perLv = 0.05 },
+    { id = "u_luck",     name = "幸运加持",   desc = "掉落率+5%",       maxLv = 5,  costBase = 250,  costScale = 1.6, effect = "luck",      perLv = 0.05 },
+    { id = "u_regen",    name = "纳米修复",   desc = "HP回复+0.5/秒",   maxLv = 5,  costBase = 300,  costScale = 1.7, effect = "regen",     perLv = 0.5 },
+    { id = "u_crit",     name = "致命打击",   desc = "暴击率+3%",       maxLv = 5,  costBase = 350,  costScale = 1.8, effect = "crit",      perLv = 0.03 },
+}
+
+--- 获取升级价格（当前等级 → 下一级的价格）
+function Systems.getUpgradeCost(upgradeDef, currentLv)
+    return math.floor(upgradeDef.costBase * (upgradeDef.costScale ^ currentLv))
+end
+
+--- 初始化升级数据
+function Systems.initUpgrades()
+    local upgrades = {}
+    for _, def in ipairs(Systems.UPGRADES) do
+        upgrades[def.id] = 0
+    end
+    return upgrades
+end
+
+--- 尝试购买升级（返回 true/false）
+function Systems.buyUpgrade(upgradeId, upgrades, starDust)
+    local def
+    for _, u in ipairs(Systems.UPGRADES) do
+        if u.id == upgradeId then def = u; break end
+    end
+    if not def then return false, starDust end
+    local lv = upgrades[def.id] or 0
+    if lv >= def.maxLv then return false, starDust end
+    local cost = Systems.getUpgradeCost(def, lv)
+    if starDust < cost then return false, starDust end
+    starDust = starDust - cost
+    upgrades[def.id] = lv + 1
+    return true, starDust
+end
+
+--- 将永久升级应用到游戏状态
+function Systems.applyUpgrades(state, upgrades)
+    if not upgrades then return end
+    local p = state.player
+    for _, def in ipairs(Systems.UPGRADES) do
+        local lv = upgrades[def.id] or 0
+        if lv > 0 then
+            local val = def.perLv * lv
+            if def.effect == "hp" then
+                p.hpMax = (p.hpMax or 100) + val
+                p.hp = p.hpMax
+            elseif def.effect == "shield" then
+                p.shieldMax = (p.shieldMax or 0) + val
+                p.shield = p.shieldMax
+            elseif def.effect == "dmg" then
+                state._permDmgMul = 1 + val
+            elseif def.effect == "speed" then
+                state._permSpeedMul = 1 + val
+            elseif def.effect == "firerate" then
+                state._permFireRateMul = 1 + val
+            elseif def.effect == "luck" then
+                state._permLuckMul = 1 + val
+            elseif def.effect == "regen" then
+                state._permRegen = val
+            elseif def.effect == "crit" then
+                state._permCritBonus = val
+            end
+        end
+    end
+end
+
+--- 计算本局获得的星尘（游戏内货币，用于永久升级）
+function Systems.calcStarDust(gameState)
+    local base = math.floor((gameState.score or 0) / 10)
+    local dayBonus = (gameState.day or 1) * 2
+    local bossBonus = 0
+    for _ in pairs(gameState.bossesKilled or {}) do bossBonus = bossBonus + 50 end
+    return base + dayBonus + bossBonus
+end
+
 return Systems

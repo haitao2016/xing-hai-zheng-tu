@@ -471,6 +471,24 @@ function M.drawMenu(vg, sw, sh, selectedFaction, selectedSkinIdx, savedAchieveme
     nvgText(vg, endBtnX + endBtnW + 8, endBtnY + endBtnH / 2, "30天后继续挑战")
     nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)
 
+    -- 每周挑战按钮
+    local wkBtnY = endBtnY + endBtnH + 12
+    local wkBtnW = 140
+    local wkBtnH = 36
+    local wkBtnX = sw / 2 - wkBtnW / 2
+    nvgBeginPath(vg)
+    nvgRoundedRect(vg, wkBtnX, wkBtnY, wkBtnW, wkBtnH, 8)
+    local wkGrad = nvgLinearGradient(vg, wkBtnX, wkBtnY, wkBtnX, wkBtnY + wkBtnH,
+        nvgRGBA(160, 100, 0, 200), nvgRGBA(120, 60, 0, 200))
+    nvgFillPaint(vg, wkGrad)
+    nvgFill(vg)
+    nvgStrokeColor(vg, nvgRGBA(255, 180, 50, 150))
+    nvgStrokeWidth(vg, 1)
+    nvgStroke(vg)
+    nvgFontSize(vg, 13)
+    nvgFillColor(vg, nvgRGBA(255, 220, 100, 240))
+    nvgText(vg, sw / 2, wkBtnY + wkBtnH / 2, "🏆 每周挑战")
+
     -- 飞船皮肤指示器 (P8.2: 显示锁定状态)
     local skinAreaX = btnX + btnW / 2 + 20
     local skinAreaY = btnY + 8
@@ -549,6 +567,22 @@ function M.drawMenu(vg, sw, sh, selectedFaction, selectedSkinIdx, savedAchieveme
     nvgFontSize(vg, 12)
     nvgFillColor(vg, nvgRGBA(150, 180, 220, 220))
     nvgText(vg, statBtnX + statBtnW / 2, statBtnY + statBtnH / 2, "生涯统计")
+
+    -- 升级按钮（右下角）
+    local upgBtnX = sw - 90
+    local upgBtnY = sh - 46
+    local upgBtnW = 80
+    local upgBtnH = 32
+    nvgBeginPath(vg)
+    nvgRoundedRect(vg, upgBtnX, upgBtnY, upgBtnW, upgBtnH, 6)
+    nvgFillColor(vg, nvgRGBA(30, 50, 40, 220))
+    nvgFill(vg)
+    nvgStrokeColor(vg, nvgRGBA(80, 200, 150, 140))
+    nvgStrokeWidth(vg, 1)
+    nvgStroke(vg)
+    nvgFontSize(vg, 12)
+    nvgFillColor(vg, nvgRGBA(100, 230, 180, 220))
+    nvgText(vg, upgBtnX + upgBtnW / 2, upgBtnY + upgBtnH / 2, "⚙ 强化")
 
     -- 底部按键提示
     nvgFontSize(vg, 11)
@@ -701,6 +735,41 @@ function M.drawGameOver(vg, state, sw, sh)
         nvgFillColor(vg, nvgRGBA(s[3][1], s[3][2], s[3][3], 255))
         nvgTextAlign(vg, NVG_ALIGN_LEFT + NVG_ALIGN_MIDDLE)
         nvgText(vg, sw / 2 + 10, y, s[2])
+    end
+
+    -- 本局亮点
+    local highlights = {}
+    if (Systems.combo.bestCombo or 0) >= 5 then
+        highlights[#highlights + 1] = { icon = "🔥", text = string.format("最高连击 ×%d", Systems.combo.bestCombo), color = { 255, 160, 40 } }
+    end
+    if #(state.relics or {}) > 0 then
+        highlights[#highlights + 1] = { icon = "💎", text = string.format("遗物收集 ×%d", #state.relics), color = { 255, 200, 50 } }
+    end
+    if #(state.ownedTech or {}) >= 5 then
+        highlights[#highlights + 1] = { icon = "⚙", text = string.format("科技解锁 ×%d", #state.ownedTech), color = { 100, 200, 255 } }
+    end
+    if bossKillCount > 0 then
+        highlights[#highlights + 1] = { icon = "👑", text = string.format("Boss征服 ×%d", bossKillCount), color = { 255, 80, 180 } }
+    end
+    if (state.totalKills or 0) >= 50 then
+        highlights[#highlights + 1] = { icon = "⚔", text = "歼灭者 (50+击杀)", color = { 255, 100, 80 } }
+    end
+    if state.day >= 30 and not state.playerDied then
+        highlights[#highlights + 1] = { icon = "🛡", text = "赛季全通·无损", color = { 0, 255, 200 } }
+    end
+
+    if #highlights > 0 then
+        local hlY = statY + #stats * lineH + 10
+        nvgFontSize(vg, 11)
+        nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)
+        nvgFillColor(vg, nvgRGBA(180, 200, 220, 150))
+        nvgText(vg, sw / 2, hlY, "— 本局亮点 —")
+        hlY = hlY + 16
+        for _, h in ipairs(highlights) do
+            nvgFillColor(vg, nvgRGBA(h.color[1], h.color[2], h.color[3], 230))
+            nvgText(vg, sw / 2, hlY, h.icon .. " " .. h.text)
+            hlY = hlY + 16
+        end
     end
 
     -- 评分

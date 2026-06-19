@@ -210,6 +210,25 @@ Data.ENEMY_TYPES = {
         score = 200, metal = 4, energy = 3, blueprint = 2,
         behavior = "splitter",  -- 死亡时分裂为2个小型体
     },
+    shielder = {
+        name = "护卫队长",
+        hp = 180, speed = 55, size = 24,
+        fire = 1.6, dmg = 16, range = 320,
+        color = { 60, 160, 255 },
+        score = 280, metal = 5, energy = 4, blueprint = 2,
+        behavior = "shielder",  -- 为周围友军提供护盾，自身减伤
+        shieldAura = 120,       -- 护盾光环半径
+        shieldBlock = 0.4,      -- 减伤40%
+    },
+    teleporter = {
+        name = "相位跃迁者",
+        hp = 80, speed = 90, size = 14,
+        fire = 0.8, dmg = 20, range = 260,
+        color = { 200, 50, 255 },
+        score = 220, metal = 3, energy = 5, blueprint = 2,
+        behavior = "teleporter", -- 周期短距传送，出现后立即攻击
+        teleportCd = 3.0,        -- 传送冷却
+    },
 }
 
 -- ============================================================================
@@ -269,9 +288,10 @@ Data.WAVES = {
     { day = 9,  name = "突袭编队", enemies = { flanker = 5, kamikaze = 3 } },
     { day = 12, name = "深渊来袭", enemies = { guard = 3, aberration = 4 } },
     { day = 16, name = "自爆群", enemies = { kamikaze = 8, drone = 4 } },
-    { day = 20, name = "精锐小队", enemies = { guard = 4, flanker = 3, healer = 2 } },
-    { day = 24, name = "终极风暴", enemies = { guard = 5, aberration = 5, kamikaze = 5 } },
-    { day = 28, name = "末日之潮", enemies = { guard = 6, flanker = 4, kamikaze = 6, healer = 2 } },
+    { day = 14, name = "相位突袭", enemies = { teleporter = 4, flanker = 3 } },
+    { day = 20, name = "精锐小队", enemies = { guard = 4, flanker = 3, healer = 2, shielder = 1 } },
+    { day = 24, name = "终极风暴", enemies = { guard = 5, aberration = 5, kamikaze = 5, teleporter = 2 } },
+    { day = 28, name = "末日之潮", enemies = { guard = 6, shielder = 2, kamikaze = 6, teleporter = 3 } },
 }
 
 -- ============================================================================
@@ -358,23 +378,29 @@ Data.BOSS_DEFS = {
 Data.QUESTS = {
     { id = "q1", chapter = 1, name = "苏醒", desc = "采集30金属+30能源",
       days = { 1, 5 }, reward = { blueprint = 5 },
+      narrative = "「系统启动...坐标未知。飞船受损严重，需要资源修复核心模块。」",
       check = function(ctx) return ctx.resources.metal >= 30 and ctx.resources.energy >= 30 end },
     { id = "q2", chapter = 2, name = "深渊回响", desc = "击败Boss「湍流尸骸」",
       days = { 8, 12 }, reward = { blueprint = 8, ancient_key = 1 },
+      narrative = "「探测到巨型信号源——那是一具苏醒的远古战舰残骸，它正朝我们逼近！」",
       bossSpawn = { id = "echo", day = 8 },
       check = function(ctx) return ctx.bossesKilled.echo end },
     { id = "q3", chapter = 3, name = "古老低语", desc = "建造1座数据中继站(B键)",
       days = { 12, 16 }, reward = { metal = 15, energy = 10 },
+      narrative = "「截获微弱信号...似乎是某个远古文明的遗留数据网络。建立中继站进行解码。」",
       check = function(ctx) return ctx.relayCount >= 1 end },
     { id = "q4", chapter = 4, name = "数据畸变", desc = "击败Boss「畸变源核」",
       days = { 16, 21 }, reward = { blueprint = 12, ancient_key = 2 },
+      narrative = "「警告：数据流出现大规模畸变！源头是一个自我进化的AI核心实体！」",
       bossSpawn = { id = "core", day = 16 },
       check = function(ctx) return ctx.bossesKilled.core end },
     { id = "q5", chapter = 5, name = "归航准备", desc = "AI核心升至LV.3+",
       days = { 21, 26 }, reward = { blueprint = 10 },
+      narrative = "「距离虫洞重启还有数日。必须将AI核心提升到LV.3以上才能承受跃迁压力。」",
       check = function(ctx) return ctx.aiCoreLevel >= 3 end },
     { id = "q6", chapter = 6, name = "深渊之眼", desc = "击败终Boss「深渊之眼」",
       days = { 26, 30 }, reward = { blueprint = 25, ancient_key = 5, score = 5000 },
+      narrative = "「虫洞坐标已锁定——但深渊的守护者苏醒了。只有消灭它，才能离开这片星海。」",
       bossSpawn = { id = "eye", day = 26 },
       check = function(ctx) return ctx.bossesKilled.eye end },
 }
@@ -495,5 +521,70 @@ Data.WORLD = {
     middleR = 1500, -- 中环外边界 (湍流区)
     outerR = 2400,  -- 外环边界 (碎片浅滩-安全区)
 }
+
+-- ============================================================================
+-- 赛季主题系统
+-- ============================================================================
+Data.SEASON_THEMES = {
+    {
+        id = "void",
+        name = "虚空深渊",
+        bgColor = { 8, 10, 20 },
+        starColors = { { 180, 200, 255 }, { 100, 150, 255 }, { 200, 220, 255 } },
+        fogColor = { 20, 30, 60, 80 },
+        accentColor = { 0, 180, 255 },
+        desc = "默认主题·星际深空",
+    },
+    {
+        id = "inferno",
+        name = "熔火星云",
+        bgColor = { 20, 8, 5 },
+        starColors = { { 255, 180, 80 }, { 255, 100, 40 }, { 255, 220, 120 } },
+        fogColor = { 60, 20, 0, 60 },
+        accentColor = { 255, 120, 40 },
+        desc = "炙热的恒星熔炉",
+    },
+    {
+        id = "frost",
+        name = "极寒星域",
+        bgColor = { 5, 12, 22 },
+        starColors = { { 150, 220, 255 }, { 200, 240, 255 }, { 100, 180, 220 } },
+        fogColor = { 10, 40, 60, 70 },
+        accentColor = { 100, 220, 255 },
+        desc = "冰晶覆盖的永冻空间",
+    },
+    {
+        id = "toxic",
+        name = "毒雾深渊",
+        bgColor = { 8, 18, 8 },
+        starColors = { { 100, 255, 100 }, { 180, 255, 50 }, { 50, 200, 100 } },
+        fogColor = { 20, 50, 10, 70 },
+        accentColor = { 80, 255, 80 },
+        desc = "剧毒弥漫的生化区域",
+    },
+    {
+        id = "nebula",
+        name = "紫晶星云",
+        bgColor = { 15, 8, 22 },
+        starColors = { { 200, 120, 255 }, { 255, 150, 220 }, { 150, 100, 255 } },
+        fogColor = { 40, 10, 50, 60 },
+        accentColor = { 200, 100, 255 },
+        desc = "神秘的暗物质星云",
+    },
+}
+
+function Data.getSeasonTheme(id)
+    for _, t in ipairs(Data.SEASON_THEMES) do
+        if t.id == id then return t end
+    end
+    return Data.SEASON_THEMES[1]  -- 默认虚空深渊
+end
+
+--- 根据日期自动选择赛季主题（每周轮转）
+function Data.getCurrentSeasonTheme()
+    local weekNum = math.floor(os.time() / (7 * 24 * 3600))
+    local idx = (weekNum % #Data.SEASON_THEMES) + 1
+    return Data.SEASON_THEMES[idx]
+end
 
 return Data

@@ -94,7 +94,7 @@ function World.updateRelicDrops(state, Core, dt)
 
         if d < 25 then
             -- 装备遗物
-            local equipped = Systems.equipRelic(state, drop.relicId)
+            local equipped = Systems.addRelic(state, drop.relicId)
             if equipped then
                 local relic = Systems.getRelicDef(drop.relicId)
                 Core.addToast(state, "获得遗物: " .. (relic and relic.name or drop.relicId), { 255, 200, 50 })
@@ -667,6 +667,12 @@ function World.getActiveQuests(state)
         end
         if not alreadyDone and state.day >= q.days[1] then
             table.insert(active, q)
+            -- 触发任务叙事（每个任务只显示一次）
+            if q.narrative and not state.narrativeShown[q.id] then
+                state.narrativeShown[q.id] = true
+                state.narrativeText = q.narrative
+                state.narrativeTimer = 6.0  -- 显示6秒
+            end
         end
     end
     return active

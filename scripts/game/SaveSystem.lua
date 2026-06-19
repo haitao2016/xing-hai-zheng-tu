@@ -12,12 +12,14 @@ local SAVE_VERSION = 1
 -- ============================================================================
 -- 保存
 -- ============================================================================
-function SaveSystem.save(persistentStats, achievements, selectedSkinIdx)
+function SaveSystem.save(persistentStats, achievements, selectedSkinIdx, upgrades, starDust)
     local saveData = {
         version = SAVE_VERSION,
         stats = persistentStats,
         achievements = achievements or {},
         selectedSkin = selectedSkinIdx or 1,
+        upgrades = upgrades or {},
+        starDust = starDust or 0,
         savedAt = os.time(),
     }
 
@@ -95,6 +97,8 @@ function SaveSystem.applyLoadedData(loadedData)
         stats = Systems.initPersistentStats(),
         achievements = {},
         selectedSkin = 1,
+        upgrades = Systems.initUpgrades(),
+        starDust = 0,
     }
 
     if not loadedData then return result end
@@ -117,6 +121,14 @@ function SaveSystem.applyLoadedData(loadedData)
     if loadedData.selectedSkin then
         result.selectedSkin = math.max(1, math.min(loadedData.selectedSkin, #Systems.SHIP_SKINS))
     end
+
+    -- 恢复永久升级
+    if loadedData.upgrades then
+        for k, v in pairs(loadedData.upgrades) do
+            result.upgrades[k] = v
+        end
+    end
+    result.starDust = loadedData.starDust or 0
 
     return result
 end

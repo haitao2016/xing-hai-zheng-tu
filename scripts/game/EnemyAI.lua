@@ -246,6 +246,78 @@ function EnemyAI.updateEnemies(state, Core, dt)
                 e.fireCd = eFire
                 EnemyAI.enemyFire(state, Core, e)
             end
+        elseif behavior == "shielder" then
+            -- 护卫队长：保持中距，为周围友军提供减伤光环
+            local toPlayer = angleToward(e.x, e.y, p.x, p.y)
+            e.angle = toPlayer
+            local spd = e.cfg.speed * spdMul
+            local idealDist = e.cfg.range * 0.6
+            if d > idealDist + 50 then
+                e.vx = e.vx + math.cos(toPlayer) * spd * dt
+                e.vy = e.vy + math.sin(toPlayer) * spd * dt
+            elseif d < idealDist - 50 then
+                e.vx = e.vx - math.cos(toPlayer) * spd * dt
+                e.vy = e.vy - math.sin(toPlayer) * spd * dt
+            end
+            -- 光环：标记附近友军受护盾保护
+            local auraR = e.cfg.shieldAura or 120
+            for _, ally in ipairs(state.enemies) do
+                if ally ~= e and not ally.isBoss then
+                    local ad = dist(e.x, e.y, ally.x, ally.y)
+                    if ad < auraR then
+                        ally.shielded = true
+                        ally.shieldedTimer = 0.2  -- 持续标记（每帧刷新）
+                    end
+                end
+            end
+            e.fireCd = e.fireCd - dt
+            if e.fireCd <= 0 and d < e.cfg.range then
+                e.fireCd = eFire
+                EnemyAI.enemyFire(state, Core, e)
+            end
+        elseif behavior == "teleporter" then
+            -- 传送者：周期传送到玩家附近，出现后快速射击
+            local toPlayer = angleToward(e.x, e.y, p.x, p.y)
+            e.angle = toPlayer
+            e.teleportCd = (e.teleportCd or 3.0) - dt
+            if e.teleportCd <= 0 then
+                e.teleportCd = e.cfg.teleportCd or 3.0
+                -- 传送到玩家侧面
+                local teleAngle = toPlayer + (rand(-1, 1) > 0 and 1 or -1) * rand(0.8, 1.5)
+                local teleDist2 = rand(100, 180)
+                local oldX, oldY = e.x, e.y
+                e.x = p.x + math.cos(teleAngle) * teleDist2
+                e.y = p.y + math.sin(teleAngle) * teleDist2
+                e.vx, e.vy = 0, 0
+                -- 传送特效
+                Core.spawnParticles(state, oldX, oldY, { 200, 50, 255 }, 8)
+                Core.spawnParticles(state, e.x, e.y, { 200, 50, 255 }, 10)
+                -- 出现后立即射击
+                e.fireCd = 0.1
+                e.angle = angleToward(e.x, e.y, p.x, p.y)
+            else
+                -- 传送冷却中缓慢远离玩家
+                local spd = e.cfg.speed * spdMul * 0.5
+                if d < 150 then
+                    e.vx = e.vx - math.cos(toPlayer) * spd * dt * 2
+                    e.vy = e.vy - math.sin(toPlayer) * spd * dt * 2
+                end
+            end
+            e.fireCd = e.fireCd - dt
+            if e.fireCd <= 0 and d < e.cfg.range then
+                e.fireCd = eFire
+                -- 快速三连射
+                for burst = -1, 1 do
+                    local a = e.angle + burst * 0.15
+                    table.insert(state.enemyBullets, {
+                        x = e.x, y = e.y,
+                        vx = math.cos(a) * 380,
+                        vy = math.sin(a) * 380,
+                        life = 1.2, dmg = e.cfg.dmg,
+                        color = e.cfg.color, owner = e,
+                    })
+                end
+            end
         else
             -- 默认AI
             local spd = e.cfg.speed * spdMul
@@ -273,6 +345,14 @@ function EnemyAI.updateEnemies(state, Core, dt)
         e.x = e.x + e.vx * dt
         e.y = e.y + e.vy * dt
         if e.hitFlash > 0 then e.hitFlash = e.hitFlash - dt end
+        -- 护盾光环衰减（护卫队长死后失效）
+        if e.shieldedTimer then
+            e.shieldedTimer = e.shieldedTimer - dt
+            if e.shieldedTimer <= 0 then
+                e.shielded = false
+                e.shieldedTimer = nil
+            end
+        end
         -- Boss特殊: Phase2 + 召唤 + 狂暴
         if e.isBoss then
             if Systems.checkBossPhase2(e) then
