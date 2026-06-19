@@ -59,8 +59,26 @@ function M.drawHUD(vg, state, sw, sh)
         nvgRoundedRect(vg, barX, sBarY, barW * shieldRatio, barH, 3)
         nvgFillColor(vg, rgba(C.shieldBar))
         nvgFill(vg)
-        nvgFillColor(vg, nvgRGBA(255, 255, 255, 220))
+        nvgFillColor(vg, nvgRGBA(255, 255, 220))
         nvgText(vg, barX + barW / 2, sBarY + barH / 2, string.format("盾 %d/%d", math.floor(p.shield), p.shieldMax))
+    end
+
+    -- 能量条（P20.1 主动技能系统使用）
+    if p.energyMax and p.energyMax > 0 then
+        local eBarY = (p.shieldMax > 0 and (barY + barH * 2 + 8) or (barY + barH + 4))
+        nvgBeginPath(vg)
+        nvgRoundedRect(vg, barX, eBarY, barW, barH, 3)
+        nvgFillColor(vg, nvgRGBA(20, 25, 40, 200))
+        nvgFill(vg)
+        local eRatio = math.max(0, p.energy / p.energyMax)
+        nvgBeginPath(vg)
+        nvgRoundedRect(vg, barX, eBarY, barW * eRatio, barH, 3)
+        nvgFillColor(vg, nvgRGBA(100, 180, 255, 220))
+        nvgFill(vg)
+        nvgFontSize(vg, 11)
+        nvgFillColor(vg, nvgRGBA(255, 255, 220))
+        nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)
+        nvgText(vg, barX + barW / 2, eBarY + barH / 2, string.format("能量 %d/%d", math.floor(p.energy), p.energyMax))
     end
 
     -- 右上：分数 & 天数/模式信息
@@ -127,11 +145,11 @@ function M.drawHUD(vg, state, sw, sh)
     if state.skills and state.skills.unlocked then
         local skills = state.skills
         local skillList = {
-            { id = "skill_dash", key = "Q", name = "冲刺", color = { 120, 220, 255 } },
-            { id = "skill_shock", key = "W", name = "冲击波", color = { 255, 200, 100 } },
-            { id = "skill_slow", key = "E", name = "减速", color = { 200, 150, 255 } },
-            { id = "skill_shield", key = "R", name = "护盾", color = { 120, 255, 160 } },
-            { id = "skill_strike", key = "T", name = "轨道", color = { 255, 100, 100 } },
+            { id = "skill_dash", key = "1", name = "冲刺", color = { 120, 220, 255 } },
+            { id = "skill_shock", key = "2", name = "冲击波", color = { 255, 200, 100 } },
+            { id = "skill_slow", key = "3", name = "减速", color = { 200, 150, 255 } },
+            { id = "skill_shield", key = "4", name = "护盾", color = { 120, 255, 160 } },
+            { id = "skill_strike", key = "5", name = "轨道", color = { 255, 100, 100 } },
         }
         local skillBoxW = 48
         local skillBoxH = 56
