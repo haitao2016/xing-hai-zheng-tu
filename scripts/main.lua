@@ -32,6 +32,7 @@ local STATE_OVER = "gameover"
 local STATE_RANK = "leaderboard"
 local STATE_STATS = "stats"
 local STATE_SETTINGS = "settings"
+local STATE_MODS = "mods"              -- Phase 26: Mod 管理器
 
 local currentState = STATE_MENU
 local gameState = nil
@@ -46,6 +47,9 @@ local dailyChallengeCompleted = false
 local dailyChallengeScore = 0
 local persistentStats = Systems.initPersistentStats()
 local savedAchievements = {}
+
+-- Phase 26: Mod 选择索引
+local _modSelectedIdx = 1
 
 -- P18/P19: 难度与战役选择
 local selectedDifficultyIdx = 2    -- 默认标准难度
@@ -221,6 +225,17 @@ function HandleUpdate(eventType, eventData)
 
         Core.update(gameState, dt, inp)
 
+        -- Phase 23: 摄像机特效、BGM 动态叠层、Hitstop
+        Core.updateCameraFX(gameState, dt)
+        Core.updateHitstop(gameState, dt)
+        local enemyCount = #(gameState.enemies or {})
+        local hasBoss = false
+        for _, e in ipairs(gameState.enemies or {}) do
+            if e.isBoss then hasBoss = true; break end
+        end
+        GameAudio.updateBGMIntensity(gameState.comboRank and gameState.comboRank.rank, enemyCount, hasBoss)
+        GameAudio.updateBGLayers(dt)
+
         -- 复活倒计时更新
         if showRevivePrompt then
             reviveCountdown = reviveCountdown - dt
@@ -240,6 +255,18 @@ function HandleUpdate(eventType, eventData)
             end
             if showRevivePrompt then
                 return  -- 仍在等待玩家选择
+            end
+            -- Phase 24: 记录本局幽灵数据用于排行与比较
+            if Core.recordGhostRun and SaveSystem and SaveSystem.saveGhost then
+                local ghost = Core.recordGhostRun(gameState)
+                SaveSystem.saveGhost(ghost)
+            end
+            -- Phase 24: 保存永久升级进度（跨局保留）
+            if SaveSystem and SaveSystem.saveMetaUpgrades and gameState.meta and gameState.meta.upgrades then
+                SaveSystem.saveMetaUpgrades(gameState.meta.upgrades)
+            end
+            if SaveSystem and SaveSystem.saveAchievements and gameState.achievements then
+                SaveSystem.saveAchievements(gameState.achievements)
             end
             currentState = STATE_OVER
             -- 更新永久统计
@@ -424,12 +451,44 @@ function HandleKeyDown(eventType, eventData)
         Leaderboard.fetchRankList()
         currentState = STATE_RANK
     end
+
+    -- Phase 26: Mod 管理器按键处理
+    if currentState == STATE_MODS then
+        if key == KEY_ESCAPE then
+            currentState = STATE_MENU
+        elseif key == KEY_UP or key == KEY_W then
+            _modSelectedIdx = math.max(1, (_modSelectedIdx or 1) - 1)
+        elseif key == KEY_DOWN or key == KEY_S then
+            local list = Data.listMods and Data.listMods() or {}
+            _modSelectedIdx = math.min(#list, (_modSelectedIdx or 1) + 1)
+        elseif key == KEY_ENTER or key == KEY_RETURN then
+            local list = Data.listMods and Data.listMods() or {}
+            if list[_modSelectedIdx or 1] then
+                Data.toggleMod(list[_modSelectedIdx].id)
+                if SaveSystem and SaveSystem.saveModConfig then
+                    SaveSystem.saveModConfig(Data.listMods())
+                end
+            end
+        end
+        return
+    end
+
+    -- Phase 26: 菜单中 M 键进入 Mod 管理器
+    if currentState == STATE_MENU and key == KEY_M then
+        GameAudio.playClick()
+        currentState = STATE_MODS
+    end
 end
 
 -- ============================================================================
 -- 点击处理
 -- ============================================================================
 function HandleClick(cx, cy)
+    -- Phase 26: Mod 管理器不处理点击（按键驱动）
+    if currentState == STATE_MODS then
+        return
+    end
+
     -- P19: 难度选择界面的卡片点击
     if currentState == STATE_DIFFICULTY then
         local dpr = graphics:GetDPR()
@@ -790,12 +849,37 @@ function StartGame()
 
     gameState = Core.newGame(S.get("default_faction"), selectedFaction, selectedGameMode)
 
+    -- Phase 24: 加载已获得的永久升级等级
+    if SaveSystem and SaveSystem.loadMetaUpgrades then
+        local meta = SaveSystem.loadMetaUpgrades()
+        if meta and next(meta) then
+            if not gameState.meta then gameState.meta = {} end
+            gameState.meta.upgrades = meta
+            Core.applyMetaUpgrades(gameState)
+        end
+    end
+    -- Phase 24: 加载已解锁的成就，触发永久升级
+    if SaveSystem and SaveSystem.loadAchievements then
+        local achs = SaveSystem.loadAchievements()
+        if achs and #achs > 0 and Core.applyAchievementUnlocks then
+            Core.applyAchievementUnlocks(gameState, achs)
+        end
+    end
+
     -- P18/P19: 应用难度与战役章节
     local difficultyIds = { "rookie", "standard", "hard", "void" }
     gameState.difficultyId = difficultyIds[selectedDifficultyIdx] or "standard"
     gameState.campaignId = "ch" .. selectedChapterIdx
     if Core.applyDifficulty then Core.applyDifficulty(gameState) end
     if Core.applyMetaUpgrades then Core.applyMetaUpgrades(gameState) end
+
+    -- Phase 24: 应用每日主题（影响敌人/资源/连击等）
+    local themeSeed = tonumber(os.date("%y%m%d")) or 1
+    local theme = Data.getDailyTheme(themeSeed)
+    if Core.applyDailyTheme and theme then
+        Core.applyDailyTheme(gameState, theme)
+        gameState.dailyTheme = theme
+    end
 
     adReviveUsed = false
     showRevivePrompt = false
@@ -863,7 +947,19 @@ function HandleNanoVGRender(eventType, eventData)
 
     if currentState == STATE_MENU then
         Render.drawMenu(vg, sw, sh, selectedFaction, selectedSkinIdx, savedAchievements, dailyChallengeCompleted)
-
+        -- Phase 27: 版本号信息（右下角）
+        if Data and Data.getVersionString then
+            nvgFontFace(vg, "sans")
+            nvgFontSize(vg, 10)
+            nvgTextAlign(vg, NVG_ALIGN_RIGHT + NVG_ALIGN_BOTTOM)
+            nvgFillColor(vg, nvgRGBA(100, 120, 160, 120))
+            nvgText(vg, sw - 12, sh - 12, Data.getVersionString())
+        end
+        -- Phase 26: Mod 管理入口提示（左下角）
+        nvgFontSize(vg, 10)
+        nvgTextAlign(vg, NVG_ALIGN_LEFT + NVG_ALIGN_BOTTOM)
+        nvgFillColor(vg, nvgRGBA(100, 140, 180, 120))
+        nvgText(vg, 12, sh - 12, "按 M 打开 Mod 管理器  |  Enter 开始  |  ↑↓ 切换阵营")
     elseif currentState == STATE_DIFFICULTY then
         Render.drawDifficultySelect(vg, sw, sh, selectedDifficultyIdx)
 
@@ -872,6 +968,10 @@ function HandleNanoVGRender(eventType, eventData)
 
     elseif currentState == STATE_SETTINGS then
         Render.drawSettings(vg, sw, sh, settings, settingSliders)
+
+    elseif currentState == STATE_MODS then
+        local modList = Data.listMods and Data.listMods() or {}
+        Render.drawModManager(vg, sw, sh, _modSelectedIdx or 1, modList)
 
     elseif currentState == STATE_GAME and gameState then
         -- 清空背景

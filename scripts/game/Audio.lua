@@ -309,4 +309,59 @@ function Audio.getCurrentBGM()
     return currentBGM
 end
 
+-- ============================================================================
+-- Phase 23: 动态 BGM 叠层 — 根据连击等级 / 战斗强度叠加副轨道
+-- ============================================================================
+local bgmLayers = {
+    combatLayer = { active = false, targetVol = 0.0, currentVol = 0.0, fadeSpeed = 2.5 },
+    intensityLayer = { active = false, targetVol = 0.0, currentVol = 0.0, fadeSpeed = 3.0 },
+    bossLayer = { active = false, targetVol = 0.0, currentVol = 0.0, fadeSpeed = 4.0 },
+}
+
+-- 连击等级 → BGM 强度映射 (C=1, B=2, A=3, S=4, SS=5, SSS=6)
+local rankToIntensity = { C = 1, B = 2, A = 3, S = 4, SS = 5, SSS = 6 }
+
+--- 根据当前战斗状态更新 BGM 各层目标音量
+-- @param comboRank string|nil 当前连击等级 ("C"/"B"/"A"/"S"/"SS"/"SSS")
+-- @param enemyCount number|nil 当前敌人数量
+-- @param hasBoss boolean|nil 是否存在 Boss
+function Audio.updateBGMIntensity(comboRank, enemyCount, hasBoss)
+    local intensity = rankToIntensity[comboRank or "C"] or 1
+    -- 敌人密度加成
+    if enemyCount and enemyCount > 8 then intensity = intensity + 1 end
+    if enemyCount and enemyCount > 16 then intensity = intensity + 1 end
+    -- 规范化到 0-1
+    local norm = math.min(1.0, intensity / 8)
+
+    bgmLayers.combatLayer.targetVol = norm * 0.7
+    bgmLayers.intensityLayer.targetVol = norm * 0.5
+    bgmLayers.bossLayer.targetVol = hasBoss and 0.8 or 0.0
+    bgmLayers.combatLayer.active = norm > 0.1
+    bgmLayers.intensityLayer.active = norm > 0.3
+    bgmLayers.bossLayer.active = hasBoss
+end
+
+--- 每帧更新 BGM 各层音量的渐入渐出（配合 updateBGMIntensity 使用）
+-- @param dt number 帧时间
+function Audio.updateBGLayers(dt)
+    for _, layer in pairs(bgmLayers) do
+        local diff = layer.targetVol - layer.currentVol
+        if math.abs(diff) > 0.001 then
+            layer.currentVol = layer.currentVol + diff * math.min(1, dt * layer.fadeSpeed)
+        else
+            layer.currentVol = layer.targetVol
+        end
+    end
+end
+
+--- 获取当前各 BGM 层的实时音量（供外部查询/调试）
+-- @return table { combat, intensity, boss }
+function Audio.getBGLayerVolumes()
+    return {
+        combat = bgmLayers.combatLayer.currentVol,
+        intensity = bgmLayers.intensityLayer.currentVol,
+        boss = bgmLayers.bossLayer.currentVol,
+    }
+end
+
 return Audio

@@ -1303,4 +1303,211 @@ function Core.triggerNPCLine(state, npcId)
     end
 end
 
+-- ============================================================================
+-- Phase 23: 屏幕震动分级与连击视觉特效
+-- ============================================================================
+
+-- 震动强度预设（用于不同事件调用 Core.shake(state, intensity, duration)）
+Core.SHAKE_PRESETS = {
+    light =   { intensity = 0.3, duration = 0.15 },  -- 小撞击/拾取
+    medium =  { intensity = 0.6, duration = 0.25 },  -- 普通敌人击杀/子弹命中
+    heavy =   { intensity = 1.2, duration = 0.35 },  -- 精英敌人击杀/护盾破碎
+    impact =  { intensity = 2.0, duration = 0.45 },  -- 爆炸/轨道打击
+    bossHit = { intensity = 3.5, duration = 0.6 },  -- Boss 阶段切换
+    death =   { intensity = 5.0, duration = 0.8 },  -- 玩家死亡
+}
+
+-- 连击等级对应的粒子爆发规模
+function Core.getComboBurstScale(rank)
+    local scales = { C = 1.0, B = 1.3, A = 1.6, S = 2.0, SS = 2.5, SSS = 3.0 }
+    return scales[rank] or 1.0
+end
+
+-- 触发连击视觉爆发（在敌人位置产生分级粒子 + 屏幕文字）
+function Core.triggerComboBurst(state, x, y, color)
+    if not state.comboRank then return end
+    local rank = state.comboRank.rank or "C"
+    local scale = Core.getComboBurstScale(rank)
+    local particleCount = math.floor(15 * scale)
+    local spreadSpeed = 150 + 50 * scale
+    Core.spawnExplosion(state, x or state.player.x, y or state.player.y,
+        color or { 255, 220, 100 }, particleCount, spreadSpeed)
+    -- S 级以上加额外外圈
+    if scale >= 2.0 then
+        Core.spawnParticles(state, x or state.player.x, y or state.player.y,
+            { 255, 255, 255 }, math.floor(10 * scale))
+    end
+    -- SSS 级触发屏幕震动
+    if rank == "SSS" then
+        Core.shake(state, 1.5, 0.4)
+    end
+end
+
+-- 屏幕彩色闪光（用于技能/状态切换时的视觉强调）
+function Core.screenFlash(state, color, alpha, duration)
+    state._screenFlash = state._screenFlash or {}
+    table.insert(state._screenFlash, {
+        color = color or { 255, 255, 255 },
+        alpha = alpha or 0.3,
+        duration = duration or 0.15,
+        time = 0,
+    })
+end
+
+-- ============================================================================
+-- Phase 23: 摄像机追踪与屏幕震动衰减更新
+-- ============================================================================
+function Core.updateCameraFX(state, dt)
+    -- 屏幕震动衰减
+    if state.shakeTime and state.shakeTime > 0 then
+        state.shakeTime = state.shakeTime - dt
+        if state.shakeTime < 0 then
+            state.shakeTime = 0
+            state.shakeIntensity = 0
+        end
+    end
+    -- 屏幕闪光衰减
+    if state._screenFlash then
+        for i = #state._screenFlash, 1, -1 do
+            local f = state._screenFlash[i]
+            f.time = f.time + dt
+            if f.time >= f.duration then
+                table.remove(state._screenFlash, i)
+            end
+        end
+    end
+end
+
+-- ============================================================================
+-- Phase 23: 时间缓动 / Hitstop 强化
+-- ============================================================================
+function Core.triggerHitstop(state, duration)
+    state._hitstopTimer = duration or 0.1
+    state.hitstop = state._hitstopTimer
+end
+
+function Core.updateHitstop(state, dt)
+    if state._hitstopTimer and state._hitstopTimer > 0 then
+        state._hitstopTimer = state._hitstopTimer - dt
+        if state._hitstopTimer <= 0 then
+            state._hitstopTimer = 0
+            state.hitstop = 0
+        end
+    end
+end
+
+-- ============================================================================
+-- Phase 24: 成就 → 永久升级 自动追踪与应用
+-- ============================================================================
+function Core.applyAchievementUnlocks(state, achievementIds)
+    if not achievementIds or not state.meta then return 0 end
+    if not state.meta.upgrades then state.meta.upgrades = {} end
+    local unlockCount = 0
+    for _, achId in ipairs(achievementIds) do
+        local metaId, level = Data.getMetaUnlockForAchievement(achId)
+        if metaId then
+            local current = state.meta.upgrades[metaId] or 0
+            local target = current + (level or 1)
+            -- 检查上限（防止无限叠加）
+            local def = Data.getMetaUpgrade(metaId)
+            if def and target <= (def.maxLevel or 5) then
+                state.meta.upgrades[metaId] = target
+                unlockCount = unlockCount + 1
+            elseif def and target > (def.maxLevel or 5) then
+                state.meta.upgrades[metaId] = def.maxLevel
+                unlockCount = unlockCount + 1
+            end
+        end
+    end
+    if unlockCount > 0 then
+        -- 立即应用到当前局战斗
+        Core.applyMetaUpgrades(state)
+    end
+    return unlockCount
+end
+
+-- 统计永久升级总加成，用于 HUD 或结算画面
+function Core.getMetaUpgradeSummary(state)
+    if not state.meta or not state.meta.upgrades then return {}, 0 end
+    local summary = {}
+    local totalLevels = 0
+    for id, lvl in pairs(state.meta.upgrades) do
+        local def = Data.getMetaUpgrade(id)
+        if def then
+            summary[id] = { level = lvl, max = def.maxLevel, name = def.name }
+            totalLevels = totalLevels + lvl
+        end
+    end
+    return summary, totalLevels
+end
+
+-- ============================================================================
+-- Phase 24: 幽灵数据 (Ghost Data)
+-- 玩家死后的"影子飞船"记录，可作为后续局的辅助 NPC 或排行参考
+-- ============================================================================
+function Core.recordGhostRun(state)
+    local ghost = {
+        timestamp = os and os.time and os.time() or 0,
+        factionId = state.factionId,
+        difficulty = state.difficultyId,
+        daysSurvived = state.day,
+        totalKills = state.totalKills or 0,
+        maxCombo = state.comboRank and state.comboRank.maxThisRun or 0,
+        score = state.score or 0,
+        techCount = #(state.ownedTech or {}),
+        relicCount = 0,
+        playTime = state._playTime or 0,
+    }
+    -- 统计遗物
+    if state.player and state.player.relics then
+        ghost.relicCount = #state.player.relics
+    end
+    return ghost
+end
+
+function Core.compareGhostRun(current, previous)
+    if not current or not previous then return {} end
+    return {
+        dayDelta = current.daysSurvived - previous.daysSurvived,
+        killDelta = current.totalKills - previous.totalKills,
+        scoreDelta = current.score - previous.score,
+        comboDelta = current.maxCombo - previous.maxCombo,
+        isNewRecord = current.score > previous.score,
+    }
+end
+
+-- ============================================================================
+-- Phase 24: 每日主题在游戏中的应用
+-- ============================================================================
+function Core.applyDailyTheme(state, theme)
+    if not theme or not theme.mod then return end
+    state.dailyTheme = theme
+    local m = theme.mod
+    -- 修改现有难度倍率（叠加）
+    if not state.difficultyMul then
+        state.difficultyMul = { enemyHp = 1, enemyDmg = 1, enemySpeed = 1,
+            spawnRate = 1, resource = 1, blueprint = 1, playerDmg = 1, playerHp = 1 }
+    end
+    if m.enemyHpMul then state.difficultyMul.enemyHp = state.difficultyMul.enemyHp * m.enemyHpMul end
+    if m.enemyDmgMul then state.difficultyMul.enemyDmg = state.difficultyMul.enemyDmg * m.enemyDmgMul end
+    if m.enemySpeedMul then state.difficultyMul.enemySpeed = state.difficultyMul.enemySpeed * m.enemySpeedMul end
+    if m.spawnRateMul then state.difficultyMul.spawnRate = state.difficultyMul.spawnRate * m.spawnRateMul end
+    if m.resourceMul then state.difficultyMul.resource = state.difficultyMul.resource * m.resourceMul end
+    if m.blueprintMul then state.difficultyMul.blueprint = state.difficultyMul.blueprint * m.blueprintMul end
+    if m.playerHpMul then
+        state.player.hpMax = math.floor(state.player.hpMax * m.playerHpMul)
+        state.player.hp = math.min(state.player.hp, state.player.hpMax)
+    end
+    if m.energyRegenMul then
+        state.stats.energyRegenBonus = (state.stats.energyRegenBonus or 1) * m.energyRegenMul
+    end
+    -- 连击衰减/倍率修饰
+    if m.comboDecayMul then
+        state._comboDecayMul = m.comboDecayMul
+    end
+    if m.comboDmgBonusMul then
+        state._comboDmgBonusMul = m.comboDmgBonusMul
+    end
+end
+
 return Core

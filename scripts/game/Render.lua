@@ -61,5 +61,6 @@ Render.drawAllyModeIndicator = RenderUI.drawAllyModeIndicator
 Render.drawCombo            = RenderUI.drawCombo
 Render.drawRelicSlots       = RenderUI.drawRelicSlots
 Render.drawStats            = RenderUI.drawStats
+Render.drawModManager       = RenderUI.drawModManager
 
 return Render

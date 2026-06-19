@@ -635,4 +635,21 @@ function Systems.updatePersistentStats(pStats, gameState)
     pStats.totalEnergyCollected = pStats.totalEnergyCollected + (gameState.totalCollected and gameState.totalCollected.energy or 0)
 end
 
+-- ============================================================================
+-- Phase 24: 成就解锁 → 永久升级 桥接
+-- ============================================================================
+function Systems.onAchievementUnlocked(state, achId)
+    if not state or not achId then return end
+    local metaId, level = Data.getMetaUnlockForAchievement(achId)
+    if metaId and Core and Core.applyAchievementUnlocks then
+        local unlocked = Core.applyAchievementUnlocks(state, { achId })
+        if unlocked > 0 then
+            local def = Data.getMetaUpgrade(metaId)
+            if def then
+                Core.addToast(state, "🏆 永久升级：" .. def.name .. " Lv+" .. (level or 1), { 255, 220, 100 })
+            end
+        end
+    end
+end
+
 return Systems

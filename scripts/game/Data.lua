@@ -1503,4 +1503,273 @@ function Data.getNPCLine(npcId, index)
     return npc.lines[i], npc
 end
 
+-- ============================================================================
+-- Phase 24: 成就 → 永久升级 解锁映射
+-- ============================================================================
+Data.ACHIEVEMENT_META_UNLOCKS = {
+    ach_first_blood = "meta_hull",         -- 首次击杀 → 舰体强化解锁
+    ach_combo_10 = "meta_weapon",           -- 10 连击 → 武器校准解锁
+    ach_combo_25 = "meta_weapon",           -- 25 连击 → 武器校准额外等级
+    ach_boss_kill = "meta_shield",          -- 击败 Boss → 护盾矩阵解锁
+    ach_30_days = "meta_reactor",           -- 生存 30 天 → 反应堆优化
+    ach_100_kills = "meta_scanner",         -- 100 击杀 → 扫描阵列
+    ach_no_damage_day = "meta_hull",        -- 无伤一天 → 额外舰体强化
+    ach_tech_master = "meta_cargo",         -- 科技全开 → 货舱扩展
+    ach_difficulty_void = "meta_shield",    -- 通关虚空难度 → 额外护盾
+}
+
+-- 成就完成时给予的固定等级加成
+Data.ACHIEVEMENT_META_LEVELS = {
+    ach_first_blood = 1,
+    ach_combo_10 = 1,
+    ach_combo_25 = 1,
+    ach_boss_kill = 1,
+    ach_30_days = 1,
+    ach_100_kills = 2,
+    ach_no_damage_day = 1,
+    ach_tech_master = 2,
+    ach_difficulty_void = 2,
+}
+
+function Data.getMetaUnlockForAchievement(achId)
+    return Data.ACHIEVEMENT_META_UNLOCKS[achId], Data.ACHIEVEMENT_META_LEVELS[achId]
+end
+
+-- ============================================================================
+-- Phase 24: 每日挑战主题池
+-- ============================================================================
+Data.DAILY_THEMES = {
+    {
+        id = "theme_elite",
+        name = "精英部队",
+        desc = "所有敌人 HP +30%，击杀奖励 +50%",
+        mod = { enemyHpMul = 1.3, rewardMul = 1.5 },
+        color = { 255, 180, 80 },
+    },
+    {
+        id = "theme_ghost",
+        name = "幽灵舰队",
+        desc = "敌人移动速度 +40%，但生命 -20%",
+        mod = { enemyHpMul = 0.8, enemySpeedMul = 1.4 },
+        color = { 200, 180, 255 },
+    },
+    {
+        id = "theme_rain",
+        name = "弹幕之雨",
+        desc = "敌人生成率 +60%，资源掉落 +30%",
+        mod = { spawnRateMul = 1.6, resourceMul = 1.3 },
+        color = { 255, 100, 150 },
+    },
+    {
+        id = "theme_power",
+        name = "能量溢涌",
+        desc = "能量回复 +100%，但玩家生命 -20%",
+        mod = { energyRegenMul = 2.0, playerHpMul = 0.8 },
+        color = { 100, 220, 255 },
+    },
+    {
+        id = "theme_apocalypse",
+        name = "末日启示",
+        desc = "敌人更强更多（全属性+50%），但蓝图掉落翻倍",
+        mod = { enemyHpMul = 1.5, enemyDmgMul = 1.5, spawnRateMul = 1.3, blueprintMul = 2.0 },
+        color = { 255, 80, 80 },
+    },
+    {
+        id = "theme_peace",
+        name = "宁静之日",
+        desc = "敌人生成率 -40%，但资源也 -20%",
+        mod = { spawnRateMul = 0.6, resourceMul = 0.8 },
+        color = { 150, 255, 150 },
+    },
+    {
+        id = "theme_combo",
+        name = "连击狂热",
+        desc = "连击衰减时间 +100%，连击伤害倍率额外 +20%",
+        mod = { comboDecayMul = 2.0, comboDmgBonusMul = 1.2 },
+        color = { 255, 200, 100 },
+    },
+}
+
+function Data.getDailyTheme(seed)
+    -- 使用日期种子稳定映射（seed 是 YYMMDD 的数字形式）
+    local s = seed or 1
+    local idx = (s % #Data.DAILY_THEMES) + 1
+    return Data.DAILY_THEMES[idx]
+end
+
+function Data.getWeeklyThemeList(baseSeed)
+    local out = {}
+    for i = 1, 7 do
+        out[i] = Data.getDailyTheme((baseSeed or 0) + i - 1)
+    end
+    return out
+end
+
+-- ============================================================================
+-- Phase 26: Mod 注册表与加载器
+-- ============================================================================
+Data.MOD_REGISTRY = {
+    loaded = {},
+    enabled = {},
+    totalCount = 0,
+}
+
+Data.MOD_SCHEMA = {
+    required = { "id", "name", "version", "author" },
+    optional = { "description", "enemies", "bosses", "relics", "tech", "difficulty", "themes" },
+    maxVersionLength = 16,
+    maxIdLength = 32,
+}
+
+function Data.validateMod(mod)
+    if type(mod) ~= "table" then return false, "Mod must be a table" end
+    for _, field in ipairs(Data.MOD_SCHEMA.required) do
+        if not mod[field] then
+            return false, "Missing required field: " .. field
+        end
+    end
+    if type(mod.id) ~= "string" or #mod.id > Data.MOD_SCHEMA.maxIdLength then
+        return false, "Invalid id length"
+    end
+    if type(mod.version) ~= "string" or #mod.version > Data.MOD_SCHEMA.maxVersionLength then
+        return false, "Invalid version"
+    end
+    return true
+end
+
+function Data.registerMod(mod)
+    local ok, err = Data.validateMod(mod)
+    if not ok then return false, err end
+    if Data.MOD_REGISTRY.loaded[mod.id] then
+        return false, "Mod already loaded: " .. mod.id
+    end
+    Data.MOD_REGISTRY.loaded[mod.id] = mod
+    Data.MOD_REGISTRY.enabled[mod.id] = mod.enabled ~= false
+    Data.MOD_REGISTRY.totalCount = Data.MOD_REGISTRY.totalCount + 1
+    if mod.enemies then
+        for key, def in pairs(mod.enemies) do
+            Data.ENEMY_TYPES[key] = def
+        end
+    end
+    if mod.bosses then
+        for key, def in pairs(mod.bosses) do
+            Data.BOSS_DEFS[key] = def
+        end
+    end
+    if mod.relics then
+        for _, def in ipairs(mod.relics) do
+            table.insert(Data.RELICS, def)
+        end
+    end
+    if mod.tech then
+        for _, def in ipairs(mod.tech) do
+            table.insert(Data.TECH_TREE, def)
+        end
+    end
+    if mod.difficulty then
+        for _, def in ipairs(mod.difficulty) do
+            table.insert(Data.DIFFICULTY_LEVELS, def)
+        end
+    end
+    if mod.themes then
+        for _, def in ipairs(mod.themes) do
+            table.insert(Data.DAILY_THEMES, def)
+        end
+    end
+    return true
+end
+
+function Data.listMods()
+    local list = {}
+    for id, mod in pairs(Data.MOD_REGISTRY.loaded) do
+        table.insert(list, {
+            id = id,
+            name = mod.name,
+            version = mod.version,
+            author = mod.author,
+            description = mod.description or "",
+            enabled = Data.MOD_REGISTRY.enabled[id],
+        })
+    end
+    table.sort(list, function(a, b) return a.id < b.id end)
+    return list
+end
+
+function Data.toggleMod(modId)
+    if Data.MOD_REGISTRY.loaded[modId] then
+        Data.MOD_REGISTRY.enabled[modId] = not (Data.MOD_REGISTRY.enabled[modId] or false)
+        return Data.MOD_REGISTRY.enabled[modId]
+    end
+    return false
+end
+
+Data.MOD_TEMPLATE = [[
+local mod = {
+    id = "example_mod",
+    name = "示例模组",
+    version = "1.0.0",
+    author = "Your Name",
+    description = "一个完整的 Mod 示例，演示如何添加新敌人、Boss 和遗物。",
+    enabled = true,
+    enemies = {
+        custom_enemy = {
+            name = "自定义敌人",
+            hp = 200, speed = 90, size = 14,
+            fire = 1.5, dmg = 15, range = 320,
+            color = { 150, 255, 200 },
+            score = 200, metal = 4, energy = 4, blueprint = 1,
+        },
+    },
+    relics = {
+        {
+            id = "r_custom",
+            name = "自定义遗物",
+            icon = "★",
+            rarity = "rare",
+            desc = "这是一个由 Mod 提供的自定义遗物。",
+            apply = function(state)
+                state.stats.dmgMul = state.stats.dmgMul * 1.15
+            end,
+        },
+    },
+}
+return mod
+]]}
+
+-- ============================================================================
+-- Phase 27: 版本信息与版权声明
+-- ============================================================================
+Data.GAME_VERSION = "2.0.0"
+Data.GAME_BUILD = 20260619
+Data.GAME_NAME = "星海征途"
+Data.GAME_NAME_EN = "Star Sea Expedition"
+Data.GAME_COPYRIGHT = "(c) 2025-2026 Star Sea Team"
+
+function Data.getVersionString()
+    return Data.GAME_NAME .. " v" .. Data.GAME_VERSION .. " (Build " .. Data.GAME_BUILD .. ")"
+end
+
+function Data.getVersionInfo()
+    return {
+        name = Data.GAME_NAME,
+        nameEn = Data.GAME_NAME_EN,
+        version = Data.GAME_VERSION,
+        build = Data.GAME_BUILD,
+        copyright = Data.GAME_COPYRIGHT,
+        versionMajor = 2,
+        versionMinor = 0,
+        versionPatch = 0,
+    }
+end
+
+function Data.checkVersionCompatibility(otherVersion)
+    if not otherVersion then return true end
+    local om, omi, op = 0, 0, 0
+    for a, b, c in string.gmatch(otherVersion, "(%d+)%.(%d+)%.(%d+)") do
+        om, omi, op = tonumber(a), tonumber(b), tonumber(c)
+    end
+    if om ~= 2 then return false end
+    return true
+end
+
 return Data

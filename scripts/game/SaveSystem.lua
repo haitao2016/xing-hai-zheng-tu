@@ -5,6 +5,7 @@
 
 local Systems = require("game.Systems")
 local SaveSystem = {}
+local M = SaveSystem
 
 local SAVE_FILE = "star_sea_save.json"
 local SAVE_VERSION = 1
@@ -153,6 +154,206 @@ function SaveSystem.loadDailyFlag(todayStr)
         return data
     end
     return nil  -- 过期的记录
+end
+
+-- ============================================================================
+-- Phase 26: Mod 配置存档
+-- ============================================================================
+function SaveSystem.saveModConfig(modList)
+    if not M.saveDirectory then
+        M.init()
+    end
+    local success = pcall(function()
+        local file = io.open(M.saveDirectory .. "/mod_config.json", "w")
+        if file then
+            local data = {
+                formatVersion = 2,
+                savedAt = os.date("%Y-%m-%d %H:%M:%S"),
+                mods = modList or {},
+            }
+            local lines = { "{",
+                '  "formatVersion": 2,',
+                '  "savedAt": "' .. data.savedAt .. '",',
+                '  "mods": ['
+            }
+            for i, m in ipairs(data.mods) do
+                table.insert(lines, '    { "id": "' .. tostring(m.id) .. '", "enabled": ' .. tostring(m.enabled) .. ' }' .. (i < #data.mods and "," or ""))
+            end
+            table.insert(lines, "  ]")
+            table.insert(lines, "}")
+            file:write(table.concat(lines, "\n"))
+            file:close()
+        end
+    end)
+    return success
+end
+
+function SaveSystem.loadModConfig()
+    if not M.saveDirectory then M.init() end
+    local result = {}
+    pcall(function()
+        local file = io.open(M.saveDirectory .. "/mod_config.json", "r")
+        if file then
+            local content = file:read("*a")
+            file:close()
+            for id, enabled in string.gmatch(content, '"id"%s*:%s*"([^"]+)"[^}]*"enabled"%s*:%s*(%a+)') do
+                result[id] = (enabled == "true")
+            end
+        end
+    end)
+    return result
+end
+
+-- ============================================================================
+-- Phase 24: 幽灵数据存档
+-- ============================================================================
+function SaveSystem.saveGhost(ghostData)
+    if not M.saveDirectory then M.init() end
+    pcall(function()
+        local file = io.open(M.saveDirectory .. "/ghost_runs.json", "w")
+        if file and ghostData then
+            local g = ghostData
+            local lines = { "{",
+                '  "timestamp": ' .. (g.timestamp or 0) .. ",",
+                '  "factionId": "' .. tostring(g.factionId or "") .. '",',
+                '  "difficulty": "' .. tostring(g.difficulty or "standard") .. '",',
+                '  "daysSurvived": ' .. (g.daysSurvived or 0) .. ",",
+                '  "totalKills": ' .. (g.totalKills or 0) .. ",",
+                '  "maxCombo": ' .. (g.maxCombo or 0) .. ",",
+                '  "score": ' .. (g.score or 0) .. ",",
+                '  "techCount": ' .. (g.techCount or 0) .. ",",
+                '  "relicCount": ' .. (g.relicCount or 0) .. ",",
+                '  "playTime": ' .. (g.playTime or 0),
+                "}"
+            }
+            file:write(table.concat(lines, "\n"))
+            file:close()
+        end
+    end)
+end
+
+function SaveSystem.loadGhost()
+    if not M.saveDirectory then M.init() end
+    local ghost = nil
+    pcall(function()
+        local file = io.open(M.saveDirectory .. "/ghost_runs.json", "r")
+        if file then
+            local content = file:read("*a")
+            file:close()
+            local g = {}
+            for key, val in string.gmatch(content, '"(%w+)"%s*:%s*([^,%s}]+)') do
+                if tonumber(val) then g[key] = tonumber(val) else g[key] = string.gsub(val, '"', '') end
+            end
+            ghost = g
+        end
+    end)
+    return ghost
+end
+
+-- ============================================================================
+-- Phase 27: 存档版本迁移
+-- ============================================================================
+function SaveSystem.migrateSaveData(oldVersion, newVersion)
+    if oldVersion == newVersion then return "up_to_date" end
+    local major, minor = 0, 0
+    if type(oldVersion) == "string" then
+        for a, b in string.gmatch(oldVersion, "(%d+)%.(%d+)") do
+            major, minor = tonumber(a), tonumber(b)
+        end
+    end
+    if major < 2 or (major == 2 and minor < 0) then
+        pcall(function()
+            local file = io.open(M.saveDirectory .. "/star_sea_save.json", "r")
+            if file then
+                file:close()
+            end
+        end)
+        return "migrated_from_v1"
+    end
+    return "no_migration_needed"
+end
+
+-- ============================================================================
+-- Phase 24: 永久升级（元进度）跨局持久化
+-- ============================================================================
+function SaveSystem.saveMetaUpgrades(upgrades)
+    if not M.saveDirectory then M.init() end
+    if not upgrades then return false end
+    pcall(function()
+        local file = io.open(M.saveDirectory .. "/meta_upgrades.json", "w")
+        if file then
+            local lines = { "{", '  "formatVersion": 1,', '  "upgrades": {' }
+            local keys = {}
+            for k, _ in pairs(upgrades) do table.insert(keys, k) end
+            table.sort(keys)
+            for i, k in ipairs(keys) do
+                local comma = i < #keys and "," or ""
+                table.insert(lines, '    "' .. k .. '": ' .. tostring(upgrades[k] or 0) .. comma)
+            end
+            table.insert(lines, "  }")
+            table.insert(lines, "}")
+            file:write(table.concat(lines, "\n"))
+            file:close()
+        end
+    end)
+    return true
+end
+
+function SaveSystem.loadMetaUpgrades()
+    if not M.saveDirectory then M.init() end
+    local upgrades = {}
+    pcall(function()
+        local file = io.open(M.saveDirectory .. "/meta_upgrades.json", "r")
+        if file then
+            local content = file:read("*a")
+            file:close()
+            for key, val in string.gmatch(content, '"(%w+)"%s*:%s*(%d+)') do
+                upgrades[key] = tonumber(val) or 0
+            end
+        end
+    end)
+    return upgrades
+end
+
+-- ============================================================================
+-- Phase 24: 已解锁成就持久化（跨局保留，与成就系统同步）
+-- ============================================================================
+function SaveSystem.saveAchievements(achievementIds)
+    if not M.saveDirectory then M.init() end
+    if not achievementIds then return false end
+    pcall(function()
+        local file = io.open(M.saveDirectory .. "/achievements.json", "w")
+        if file then
+            local lines = { "{", '  "count": ' .. #achievementIds .. ',', '  "ids": [' }
+            for i, id in ipairs(achievementIds) do
+                local comma = i < #achievementIds and "," or ""
+                table.insert(lines, '    "' .. tostring(id) .. '"' .. comma)
+            end
+            table.insert(lines, "  ]")
+            table.insert(lines, "}")
+            file:write(table.concat(lines, "\n"))
+            file:close()
+        end
+    end)
+    return true
+end
+
+function SaveSystem.loadAchievements()
+    if not M.saveDirectory then M.init() end
+    local ids = {}
+    pcall(function()
+        local file = io.open(M.saveDirectory .. "/achievements.json", "r")
+        if file then
+            local content = file:read("*a")
+            file:close()
+            for id in string.gmatch(content, '"([%w_]+)"') do
+                if id ~= "formatVersion" and id ~= "count" and id ~= "ids" then
+                    table.insert(ids, id)
+                end
+            end
+        end
+    end)
+    return ids
 end
 
 return SaveSystem

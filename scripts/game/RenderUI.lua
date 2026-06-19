@@ -287,6 +287,12 @@ function M.drawHUD(vg, state, sw, sh)
         nvgFillColor(vg, nvgRGBA(statusColor[1], statusColor[2], statusColor[3], 200))
         nvgFill(vg)
     end
+
+    -- Phase 23: 连击等级横幅（屏幕顶部中央的大号显示）
+    M.drawComboBanner(vg, state, sw, sh)
+
+    -- Phase 23: 屏幕闪光覆盖层
+    M.drawScreenFlash(vg, state, sw, sh)
 end
 
 -- ============================================================================
@@ -1984,6 +1990,179 @@ function M.drawCampaignSelect(vg, sw, sh, selectedChapter, chapterProgress)
     nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)
     nvgFillColor(vg, nvgRGBA(160, 180, 220, 200))
     nvgText(vg, sw / 2, sh - 60, "↑ ↓ 选择章节 | Enter 开始 | Esc 返回")
+end
+
+-- ============================================================================
+-- Phase 23: 连击等级横幅 + 屏幕闪光效果
+-- ============================================================================
+function M.drawComboBanner(vg, state, sw, sh)
+    if not state.comboRank or not state.comboRank.rank or state.comboRank.count < 5 then return end
+    local cr = state.comboRank
+    local rankColors = {
+        C = { 180, 180, 180 },
+        B = { 100, 220, 120 },
+        A = { 100, 180, 255 },
+        S = { 255, 220, 80 },
+        SS = { 255, 150, 80 },
+        SSS = { 255, 80, 200 },
+    }
+    local color = rankColors[cr.rank] or { 180, 180, 180 }
+    local fadeT = cr.decayTimer or 0
+    local baseAlpha = 180
+    if fadeT > 0 then baseAlpha = math.floor(180 * (1 - fadeT / 3)) end
+
+    -- 顶部居中大文字
+    nvgFontFace(vg, "sans")
+    nvgFontSize(vg, 56)
+    nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)
+    nvgFillColor(vg, nvgRGBA(color[1], color[2], color[3], baseAlpha))
+    nvgText(vg, sw / 2, sh * 0.12, "RANK " .. cr.rank)
+
+    nvgFontSize(vg, 18)
+    nvgFillColor(vg, nvgRGBA(220, 220, 240, 200))
+    nvgText(vg, sw / 2, sh * 0.15, "× " .. cr.count .. " COMBO")
+
+    -- SSS 级加装饰线
+    if cr.rank == "SSS" then
+        nvgBeginPath(vg)
+        nvgMoveTo(vg, sw / 2 - 180, sh * 0.17)
+        nvgLineTo(vg, sw / 2 + 180, sh * 0.17)
+        nvgStrokeColor(vg, nvgRGBA(color[1], color[2], color[3], 150))
+        nvgStrokeWidth(vg, 2)
+        nvgStroke(vg)
+    end
+end
+
+function M.drawScreenFlash(vg, state, sw, sh)
+    if not state._screenFlash or #state._screenFlash == 0 then return end
+    for _, f in ipairs(state._screenFlash) do
+        local progress = f.time / f.duration
+        local alpha = math.floor(f.alpha * 255 * (1 - progress))
+        if alpha > 0 then
+            nvgBeginPath(vg)
+            nvgRect(vg, 0, 0, sw, sh)
+            nvgFillColor(vg, nvgRGBA(f.color[1], f.color[2], f.color[3], alpha))
+            nvgFill(vg)
+        end
+    end
+end
+
+-- ============================================================================
+-- Phase 26: Mod 管理器界面
+-- ============================================================================
+function M.drawModManager(vg, sw, sh, selectedIdx, mods)
+    nvgBeginPath(vg)
+    nvgRect(vg, 0, 0, sw, sh)
+    nvgFillColor(vg, nvgRGBA(8, 10, 24, 240))
+    nvgFill(vg)
+
+    nvgFontFace(vg, "sans")
+    nvgFontSize(vg, 32)
+    nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)
+    nvgFillColor(vg, nvgRGBA(200, 220, 255, 240))
+    nvgText(vg, sw / 2, 50, "MOD 管理器")
+    nvgFontSize(vg, 11)
+    nvgFillColor(vg, nvgRGBA(140, 160, 200, 200))
+    nvgText(vg, sw / 2, 78, "MOD   MANAGER")
+
+    local modList = mods or Data and Data.listMods and Data.listMods() or {}
+    if #modList == 0 then
+        nvgFontSize(vg, 16)
+        nvgFillColor(vg, nvgRGBA(160, 180, 200, 180))
+        nvgText(vg, sw / 2, sh / 2, "当前没有加载任何 Mod")
+        nvgFontSize(vg, 11)
+        nvgFillColor(vg, nvgRGBA(120, 140, 180, 140))
+        nvgText(vg, sw / 2, sh / 2 + 28, "将 Lua Mod 文件放入 mods/ 目录后重启游戏")
+        return
+    end
+
+    local listX = 80
+    local listY = 120
+    local listW = 280
+    local itemH = 44
+    for i, mod in ipairs(modList) do
+        local y = listY + (i - 1) * (itemH + 4)
+        local isSelected = i == (selectedIdx or 1)
+
+        nvgBeginPath(vg)
+        nvgRoundedRect(vg, listX, y, listW, itemH, 4)
+        if isSelected then
+            nvgFillColor(vg, nvgRGBA(100, 180, 255, 40))
+        else
+            nvgFillColor(vg, nvgRGBA(30, 40, 60, 120))
+        end
+        nvgFill(vg)
+
+        nvgBeginPath(vg)
+        nvgRoundedRect(vg, listX, y, listW, itemH, 4)
+        if isSelected then
+            nvgStrokeColor(vg, nvgRGBA(100, 180, 255, 220))
+            nvgStrokeWidth(vg, 2)
+        else
+            nvgStrokeColor(vg, nvgRGBA(80, 100, 140, 100))
+            nvgStrokeWidth(vg, 1)
+        end
+        nvgStroke(vg)
+
+        nvgFontSize(vg, 14)
+        nvgTextAlign(vg, NVG_ALIGN_LEFT + NVG_ALIGN_MIDDLE)
+        nvgFillColor(vg, nvgRGBA(220, 230, 255, 220))
+        nvgText(vg, listX + 12, y + 16, mod.name)
+
+        nvgFontSize(vg, 10)
+        nvgFillColor(vg, nvgRGBA(140, 160, 200, 180))
+        nvgText(vg, listX + 12, y + 34, tostring(mod.author) .. " · v" .. tostring(mod.version))
+
+        nvgFontSize(vg, 11)
+        nvgTextAlign(vg, NVG_ALIGN_RIGHT + NVG_ALIGN_MIDDLE)
+        if mod.enabled then
+            nvgFillColor(vg, nvgRGBA(100, 255, 150, 220))
+            nvgText(vg, listX + listW - 12, y + itemH / 2, "✓ 启用")
+        else
+            nvgFillColor(vg, nvgRGBA(200, 100, 100, 180))
+            nvgText(vg, listX + listW - 12, y + itemH / 2, "✗ 禁用")
+        end
+    end
+
+    local detailX = listX + listW + 30
+    local detailY = listY
+    local detailW = sw - detailX - 80
+    local detailH = sh - listY - 140
+    nvgBeginPath(vg)
+    nvgRoundedRect(vg, detailX, detailY, detailW, detailH, 6)
+    nvgFillColor(vg, nvgRGBA(20, 30, 50, 180))
+    nvgFill(vg)
+    nvgStrokeColor(vg, nvgRGBA(100, 140, 200, 100))
+    nvgStrokeWidth(vg, 1)
+    nvgStroke(vg)
+
+    local sel = modList[selectedIdx or 1]
+    if sel then
+        nvgFontSize(vg, 20)
+        nvgTextAlign(vg, NVG_ALIGN_LEFT + NVG_ALIGN_TOP)
+        nvgFillColor(vg, nvgRGBA(220, 240, 255, 240))
+        nvgText(vg, detailX + 20, detailY + 20, sel.name)
+
+        nvgFontSize(vg, 11)
+        nvgFillColor(vg, nvgRGBA(140, 180, 220, 180))
+        nvgText(vg, detailX + 20, detailY + 46, "作者: " .. tostring(sel.author) .. " · 版本: v" .. tostring(sel.version))
+
+        nvgFontSize(vg, 13)
+        nvgFillColor(vg, nvgRGBA(200, 210, 230, 220))
+        local desc = sel.description or ""
+        local lineY = detailY + 80
+        for line in string.gmatch(desc, "([^\n]+)") do
+            nvgText(vg, detailX + 20, lineY, line)
+            lineY = lineY + 20
+            if lineY > detailY + detailH - 80 then break end
+        end
+    end
+
+    nvgFontSize(vg, 12)
+    nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)
+    nvgFillColor(vg, nvgRGBA(160, 180, 220, 200))
+    nvgText(vg, sw / 2, sh - 50, "↑ ↓ 选择  |  Enter 切换启用/禁用  |  Esc 返回")
+    nvgText(vg, sw / 2, sh - 30, "Mod 总数: " .. #modList)
 end
 
 return M
