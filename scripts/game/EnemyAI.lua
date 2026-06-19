@@ -68,6 +68,19 @@ function EnemyAI.spawnBoss(state, Core, bossId)
     Audio.playBossAlarm()
     -- Phase 6.1: Boss出场震动
     Core.shake(state, 6, 0.8)
+    -- P12.2: Boss出场对话
+    local dialogue = Data.BOSS_DIALOGUE[bossId]
+    if dialogue and dialogue.spawn then
+        local firstLine = dialogue.spawn[1]
+        if firstLine then
+            state._bossDialogue = {
+                text = firstLine,
+                color = def.color,
+                timer = 3.0,
+                alpha = 1.0,
+            }
+        end
+    end
 end
 
 -- ============================================================================
@@ -376,6 +389,16 @@ function EnemyAI.updateEnemies(state, Core, dt)
                 Core.addToast(state, "⚠ " .. (e.cfg.name or "Boss") .. " Phase 2!", { 255, 80, 255 })
                 Core.shake(state, 10, 0.6)
                 Core.spawnExplosion(state, e.x, e.y, { 255, 80, 255 }, 20, 250)
+                -- P12.2: Phase切换对话
+                local dialogue = Data.BOSS_DIALOGUE[e.bossId]
+                if dialogue and dialogue.phase then
+                    state._bossDialogue = {
+                        text = dialogue.phase[1],
+                        color = e.cfg.color,
+                        timer = 2.5,
+                        alpha = 1.0,
+                    }
+                end
             end
             if e.hp < e.hpMax * 0.3 and not e.enraged then
                 e.enraged = true
@@ -629,7 +652,7 @@ function EnemyAI.onEnemyKilled(state, Core, e)
     if Systems.combo.count >= 3 then
         Audio.playCombo(Systems.combo.count)
     end
-    local comboMul, milestone = Systems.onKill()
+    local comboMul, milestone = Systems.onKill(state)
     if milestone then
         Core.applyComboMilestone(state, milestone)
     end
@@ -637,6 +660,16 @@ function EnemyAI.onEnemyKilled(state, Core, e)
     if Systems.hasRelic(state, "r_xp_boost") then baseScore = math.floor(baseScore * 1.3) end
     state.score = state.score + math.floor(baseScore * comboMul)
     state.totalKills = state.totalKills + 1
+    -- P14.2: 每周挑战进度更新 - kill
+    if state.weeklyChallenge and not state.weeklyChallenge.completed then
+        if state.weeklyChallenge.type == "kill" then
+            state.weeklyChallenge.progress = state.weeklyChallenge.progress + 1
+            if state.weeklyChallenge.progress >= state.weeklyChallenge.target then
+                state.weeklyChallenge.completed = true
+                Core.addToast(state, "🎯 社区挑战完成: " .. state.weeklyChallenge.name, { 0, 255, 180 })
+            end
+        end
+    end
     if e.eliteReward then
         state.achStats = state.achStats or {}
         state.achStats.eliteKills = (state.achStats.eliteKills or 0) + 1
@@ -707,8 +740,39 @@ function EnemyAI.onEnemyKilled(state, Core, e)
     -- Boss击杀
     if e.isBoss and e.bossId then
         state.bossesKilled[e.bossId] = true
+        state.bossKillCount = (state.bossKillCount or 0) + 1
+        -- P14.2: 每周挑战 - boss
+        if state.weeklyChallenge and not state.weeklyChallenge.completed then
+            if state.weeklyChallenge.type == "boss" then
+                state.weeklyChallenge.progress = state.bossKillCount
+                if state.weeklyChallenge.progress >= state.weeklyChallenge.target then
+                    state.weeklyChallenge.completed = true
+                    Core.addToast(state, "🎯 社区挑战完成: " .. state.weeklyChallenge.name, { 0, 255, 180 })
+                end
+            end
+        end
         Core.addToast(state, S.get("hud_boss_defeated", e.cfg.name), { 255, 215, 0 })
         Core.dropResources(state, e.x, e.y, 0, 0, e.cfg.blueprint or 5, e.cfg.key or 0)
+        -- P12.3: Boss击杀解锁编年史
+        state.chronoUnlocked = state.chronoUnlocked or {}
+        for _, c in ipairs(Data.CHRONICLES) do
+            if c.unlockBoss and c.unlockBoss == e.bossId and not state.chronoUnlocked[c.id] then
+                state.chronoUnlocked[c.id] = true
+                Core.addFloatingText(state, e.x, e.y - 30,
+                    "📖 新资料解锁", { 255, 220, 100 }, 2.0)
+                Core.addToast(state, "📖 新资料: " .. c.title, { 255, 220, 100 })
+            end
+        end
+        -- P12.2: Boss击杀对话
+        local dialogue = Data.BOSS_DIALOGUE[e.bossId]
+        if dialogue and dialogue.kill then
+            state._bossDialogue = {
+                text = dialogue.kill[1],
+                color = e.cfg.color,
+                timer = 2.5,
+                alpha = 1.0,
+            }
+        end
         -- Phase 6: Boss击杀增强爆炸 - 多层粒子
         Core.spawnExplosion(state, e.x, e.y, e.cfg.color, 45, 380)
         Core.spawnExplosion(state, e.x, e.y, { 255, 255, 200 }, 20, 200) -- 内层白色闪光

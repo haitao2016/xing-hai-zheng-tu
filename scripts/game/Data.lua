@@ -109,6 +109,13 @@ Data.FACTIONS = {
         color = { 255, 184, 77 },
         bonuses = { tradeDiscount = 0.15, blueprintMul = 1.10 },
         desc = "交易价格-15%, 蓝图掉落+10%",
+        story = [[
+在星际文明的早期，商人们用最先进的加密技术保护交易数据。
+他们发现，每一笔交易都是宇宙数据的一部分。
+如今，商盟用贸易网络连接整个已知宇宙，
+用数据编织着跨越星海的秩序。]],
+        intro = "商人联盟:自由贸易倡导者",
+        bossTitle = "金色王座",
     },
     {
         id = "warband",
@@ -117,6 +124,13 @@ Data.FACTIONS = {
         color = { 255, 58, 92 },
         bonuses = { dmgMul = 1.20, fireRateMul = 1.15 },
         desc = "伤害+20%, 射速+15%",
+        story = [[
+战团起源于第一次星际战争的老兵。
+他们拒绝放下武器，因为宇宙从来没有真正的和平。
+每一个边界都是他们用炮火铭刻的宣言，
+每一次战斗都是他们对生存的证明。]],
+        intro = "战争兵团:纯粹的战争艺术",
+        bossTitle = "铁血指挥",
     },
     {
         id = "scholars",
@@ -125,14 +139,254 @@ Data.FACTIONS = {
         color = { 0, 240, 255 },
         bonuses = { shieldRegenAdd = 3, hijackBlueprint = 0.25 },
         desc = "护盾回复+3/秒, 劫持蓝图+25%",
+        story = [[
+学者会守护着宇宙中最古老的知识。
+他们相信，理解敌人的系统比任何武器都更强大。
+他们的护盾不是简单的能量屏障，而是基于对攻击的理解，
+用最少的能量化解最大的威胁。]],
+        intro = "学者议会:知识的守护者",
+        bossTitle = "知识终端",
     },
 }
+
+-- ============================================================================
+-- P12.2: Boss对话
+-- ============================================================================
+Data.BOSS_DIALOGUE = {
+    crystal = {
+        spawn = { "入侵者...检测到...", "开始净化程序..." },
+        phase = { "护盾系统激活...", "核心能量重组..." },
+        kill = { "净化程序...失败..." },
+    },
+    hive = {
+        spawn = { "你惊动了蜂群...", "没有逃跑的机会了..." },
+        phase = { "警告:蜂后觉醒..." },
+        kill = { "蜂群...溃散..." },
+    },
+    titan = {
+        spawn = { "泰坦级单位已启动", "准备进行毁灭打击..." },
+        phase = { "泰坦装甲受损，进入狂怒模式" },
+        kill = { "泰坦...已停机..." },
+    },
+    void = {
+        spawn = { "你不该来到这里...", "虚空...会吞噬一切..." },
+        phase = { "你以为你能赢吗？" },
+        kill = { "这...只是开始..." },
+    },
+    arbiter = {
+        spawn = { "仲裁协议:开启", "你的行为将受到审判..." },
+        phase = { "召唤仲裁骑士团" },
+        kill = { "协议...终止..." },
+    },
+    leviathan = {
+        spawn = { "深渊苏醒", "你将成为我的养分..." },
+        phase = { "吞噬小行星恢复中..." },
+        kill = { "深渊...不会终结..." },
+    },
+}
+
+-- ============================================================================
+-- P12.3: 星海编年史 (Lore收集系统)
+-- ============================================================================
+Data.CHRONICLES = {
+    {
+        id = "c1",
+        title = "起源:第一次星际远航",
+        content = [[
+公元2187年，人类首次突破光速屏障。
+那艘名为"先驱者"的飞船，用了整整三代人的时间，
+才抵达最近的恒星系统。
+当他们终于接触到外星文明时，
+他们发现，宇宙比想象中更加复杂，也更加危险。]],
+        unlockDay = 1,
+    },
+    {
+        id = "c2",
+        title = "三大阵营的诞生",
+        content = [[
+星际战争结束后，幸存的人类分道扬镳。
+商人们用贸易重建秩序，战士们用炮火守护边界，
+学者们用知识寻找答案。
+三大阵营的选择，决定了之后千年的文明走向。]],
+        unlockDay = 3,
+    },
+    {
+        id = "c3",
+        title = "虚空裂隙的发现",
+        content = [[
+在星域的最边缘，空间本身似乎出了问题。
+那些从裂隙中涌出的实体，不遵循任何已知的物理定律。
+学者会将其称为"零维投影"，
+而战团只是简单地称之为：威胁。]],
+        unlockDay = 7,
+    },
+    {
+        id = "c4",
+        title = "中继站协议",
+        content = [[
+中继站是文明的灯塔。
+它们在星海中建立了一张通讯网络，
+让相隔数千光年的人们能够彼此联系。
+保护中继站，就是保护文明本身。]],
+        unlockDay = 5,
+    },
+    {
+        id = "c5",
+        title = "远古钥匙的秘密",
+        content = [[
+在某些古老的废墟中，
+存在着一种被称为"远古钥匙"的装置。
+它们似乎能打开通往其他维度的大门，
+但这些大门背后究竟是什么，
+至今没有人活着回来告诉我们答案。]],
+        unlockDay = 10,
+    },
+    {
+        id = "c6",
+        title = "关于遗物",
+        content = [[
+遗物不是简单的装备。
+它们是文明的结晶，是那些逝去的英雄们
+用生命和智慧留下的礼物。
+每一件遗物都承载着一段故事，
+等待新的主人去发现、去延续。]],
+        unlockAchievement = "a_relic_3",
+    },
+    {
+        id = "c7",
+        title = "隐藏Boss的真相",
+        content = [[
+据说在星域的最深处，存在着一个不属于这个维度的存在。
+它没有名字，没有形态，只有无尽的虚无。
+只有当你足够强大，
+当你击败了所有的Boss之后，
+它才会出现在你面前。
+学者会称之为"虚空裂隙"，
+而战团只是简单地称之为：最终审判。]],
+        unlockBoss = "void",
+    },
+    {
+        id = "c8",
+        title = "每日挑战的起源",
+        content = [[
+每日挑战系统源于古代的"试炼协议"。
+它会根据你最近的行为，
+动态调整难度和规则，
+让你永远无法预测下一次会面对什么。
+这是宇宙对你的考验，
+也是你证明自己的机会。]],
+        unlockDay = 2,
+    },
+}
+
+-- ============================================================================
+-- P14.2: 社区挑战系统 (Weekly Community Challenges)
+-- ============================================================================
+Data.COMMUNITY_CHALLENGES = {
+    {
+        id = "cha_survivor",
+        name = "生还者",
+        desc = "存活15天",
+        target = 15,
+        type = "day",
+        reward = { blueprint = 5, score = 2000 },
+    },
+    {
+        id = "cha_hunter",
+        name = "猎手",
+        desc = "击杀100个敌人",
+        target = 100,
+        type = "kill",
+        reward = { blueprint = 3, score = 1500 },
+    },
+    {
+        id = "cha_boss",
+        name = "弑神者",
+        desc = "击败3个Boss",
+        target = 3,
+        type = "boss",
+        reward = { ancient_key = 1, score = 3000 },
+    },
+    {
+        id = "cha_combo",
+        name = "连击大师",
+        desc = "达成50连击",
+        target = 50,
+        type = "combo",
+        reward = { blueprint = 4, score = 1800 },
+    },
+    {
+        id = "cha_damage",
+        name = "破坏之王",
+        desc = "造成5000点伤害",
+        target = 5000,
+        type = "damage",
+        reward = { blueprint = 6, score = 2500 },
+    },
+    {
+        id = "cha_collector",
+        name = "收集者",
+        desc = "采集500单位资源",
+        target = 500,
+        type = "resource",
+        reward = { blueprint = 4, energy = 200 },
+    },
+}
+
+function Data.getWeeklyChallenge()
+    local day = tonumber(os.date("%d")) or 1
+    local idx = ((day - 1) % #Data.COMMUNITY_CHALLENGES) + 1
+    return Data.COMMUNITY_CHALLENGES[idx]
+end
 
 function Data.getFaction(id)
     for _, f in ipairs(Data.FACTIONS) do
         if f.id == id then return f end
     end
     return nil
+end
+
+-- ============================================================================
+-- P16.1: Mod支持 - 配置扩展系统
+-- ============================================================================
+function Data.registerEnemyType(key, def)
+    if type(key) ~= "string" or type(def) ~= "table" then return false end
+    Data.ENEMY_TYPES[key] = def
+    return true
+end
+
+function Data.registerBoss(key, def)
+    if type(key) ~= "string" or type(def) ~= "table" then return false end
+    Data.BOSS_DEFS[key] = def
+    return true
+end
+
+function Data.registerRelic(def)
+    if type(def) ~= "table" or not def.id then return false end
+    table.insert(Data.RELICS, def)
+    return true
+end
+
+function Data.registerWeeklyChallenge(def)
+    if type(def) ~= "table" or not def.id then return false end
+    table.insert(Data.COMMUNITY_CHALLENGES, def)
+    return true
+end
+
+function Data.loadMod(config)
+    if type(config) ~= "table" then return end
+    if config.enemies then
+        for k, v in pairs(config.enemies) do Data.registerEnemyType(k, v) end
+    end
+    if config.bosses then
+        for k, v in pairs(config.bosses) do Data.registerBoss(k, v) end
+    end
+    if config.relics then
+        for _, v in ipairs(config.relics) do Data.registerRelic(v) end
+    end
+    if config.challenges then
+        for _, v in ipairs(config.challenges) do Data.registerWeeklyChallenge(v) end
+    end
 end
 
 -- ============================================================================

@@ -63,12 +63,21 @@ Systems.COMBO_MILESTONES = {
     { at = 50, reward = "overdrive", desc = "火力全开5秒" },
 }
 
-function Systems.onKill()
+function Systems.onKill(state)
     local c = Systems.combo
     c.count = c.count + 1
     c.timer = c.maxTimer
     c.displayTimer = 0.5  -- 显示动画
     if c.count > c.bestCombo then c.bestCombo = c.count end
+    -- P14.2: 每周挑战 - combo进度
+    if state and state.weeklyChallenge and not state.weeklyChallenge.completed then
+        if state.weeklyChallenge.type == "combo" then
+            state.weeklyChallenge.progress = math.max(state.weeklyChallenge.progress or 0, c.count)
+            if state.weeklyChallenge.progress >= state.weeklyChallenge.target then
+                state.weeklyChallenge.completed = true
+            end
+        end
+    end
     -- 倍率计算：5连=1.5x, 10连=2x, 20连=3x, 50连=5x
     if c.count >= 50 then c.multiplier = 5.0
     elseif c.count >= 20 then c.multiplier = 3.0

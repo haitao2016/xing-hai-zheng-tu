@@ -24,8 +24,13 @@ function Combat.updateBullets(state, dt)
         if b.homing then
             local nearest, nearDist = nil, 400
             for _, e in ipairs(state.enemies) do
-                local d = dist(b.x, b.y, e.x, e.y)
+                -- P17.2: 距离剔除
+                local dx = b.x - e.x
+                local dy = b.y - e.y
+                if math.abs(dx) > nearDist then goto continue_homing end
+                local d = math.sqrt(dx * dx + dy * dy)
                 if d < nearDist then nearest = e; nearDist = d end
+                ::continue_homing::
             end
             if nearest then
                 local targetAng = math.atan(nearest.y - b.y, nearest.x - b.x)
@@ -67,7 +72,11 @@ function Combat.checkCollisions(state, Core)
         local hit = false
         for ei = #state.enemies, 1, -1 do
             local e = state.enemies[ei]
-            local d = dist(b.x, b.y, e.x, e.y)
+            -- P17.2: 距离剔除 - 远敌跳过碰撞
+            local dx = b.x - e.x
+            local dy = b.y - e.y
+            if math.abs(dx) > 40 or math.abs(dy) > 40 then goto nextBullet end
+            local d = math.sqrt(dx * dx + dy * dy)
             if d < (e.radius or 12) + 4 then
                 -- 偏转词缀: 概率偏转子弹
                 if e.deflectChance and math.random() < e.deflectChance then
@@ -128,7 +137,11 @@ function Combat.checkCollisions(state, Core)
         local b = state.bullets[bi]
         for ai = #state.asteroids, 1, -1 do
             local a = state.asteroids[ai]
-            local d = dist(b.x, b.y, a.x, a.y)
+            -- P17.2: 距离剔除
+            local dx = b.x - a.x
+            local dy = b.y - a.y
+            if math.abs(dx) > (a.radius + 30) then goto nextAst end
+            local d = math.sqrt(dx * dx + dy * dy)
             if d < a.radius then
                 a.hp = a.hp - b.dmg
                 Core.spawnParticles(state, b.x, b.y, { 180, 160, 120 }, 2)
@@ -139,6 +152,7 @@ function Combat.checkCollisions(state, Core)
                 table.remove(state.bullets, bi)
                 break
             end
+            ::nextAst::
         end
     end
     -- 敌方子弹 vs 玩家
@@ -237,8 +251,13 @@ function Combat.updateMissiles(state, Core, dt)
             if not m.target then
                 local bestD = 400
                 for _, e in ipairs(state.enemies) do
-                    local d2 = dist(m.x, m.y, e.x, e.y)
+                    -- P17.2: 距离剔除
+                    local dx2 = m.x - e.x
+                    local dy2 = m.y - e.y
+                    if math.abs(dx2) > bestD then goto continue_missile end
+                    local d2 = math.sqrt(dx2 * dx2 + dy2 * dy2)
                     if d2 < bestD then bestD = d2; m.target = e end
+                    ::continue_missile::
                 end
             end
             if m.target then
@@ -265,7 +284,11 @@ function Combat.updateMissiles(state, Core, dt)
             -- 命中检测
             for ei = #state.enemies, 1, -1 do
                 local e = state.enemies[ei]
-                if dist(m.x, m.y, e.x, e.y) < (e.radius or 12) + 8 then
+                -- P17.2: 距离剔除
+                local mdx = m.x - e.x
+                local mdy = m.y - e.y
+                if math.abs(mdx) > 50 or math.abs(mdy) > 50 then goto continue_mhit end
+                if math.sqrt(mdx * mdx + mdy * mdy) < (e.radius or 12) + 8 then
                     local dmg = math.floor(35 * state.stats.dmgMul)
                     e.hp = e.hp - dmg
                     e.hitFlash = 0.2
@@ -277,6 +300,7 @@ function Combat.updateMissiles(state, Core, dt)
                     table.remove(state.missiles, i)
                     break
                 end
+                ::continue_mhit::
             end
         end
     end

@@ -76,6 +76,10 @@ function Core.newGame(playerName, factionId, gameMode)
         completedQuests = {},
         relayStations = {},
         relayCount = 0,
+        -- P14.2: 每周挑战
+        weeklyChallenge = {
+            id = nil, name = nil, progress = 0, target = 0, type = nil, completed = false,
+        },
         -- 杂项
         name = playerName or "征途者",
         spawnTimer = 0,
@@ -146,6 +150,19 @@ function Core.newGame(playerName, factionId, gameMode)
     else
         state.tradeDiscount = 0
         state.blueprintMul = 1.0
+    end
+    -- P14.2: 初始化每周挑战
+    local weekly = Data.getWeeklyChallenge()
+    if weekly then
+        state.weeklyChallenge = {
+            id = weekly.id,
+            name = weekly.name,
+            desc = weekly.desc,
+            target = weekly.target,
+            type = weekly.type,
+            progress = 0,
+            completed = false,
+        }
     end
     -- 初始化扩展系统
     Systems.initRelics(state)
@@ -325,6 +342,16 @@ function Core.update(state, dt, inputState)
         if state.dayTimer >= state.dayLength then
             state.dayTimer = state.dayTimer - state.dayLength
             state.day = state.day + 1
+            -- P14.2: 每周挑战 - day进度
+            if state.weeklyChallenge and not state.weeklyChallenge.completed then
+                if state.weeklyChallenge.type == "day" then
+                    state.weeklyChallenge.progress = state.day
+                    if state.weeklyChallenge.progress >= state.weeklyChallenge.target then
+                        state.weeklyChallenge.completed = true
+                        Core.addToast(state, "🎯 社区挑战完成: " .. state.weeklyChallenge.name, { 0, 255, 180 })
+                    end
+                end
+            end
             if not state.isEndless and state.day > 30 then
                 state.seasonOver = true
                 Core.addToast(state, S.get("hud_season_end"), { 255, 215, 0 })
@@ -568,6 +595,32 @@ function Core.update(state, dt, inputState)
         end
     end
 
+    -- P12.2: Boss对话更新
+    if state._bossDialogue then
+        state._bossDialogue.timer = state._bossDialogue.timer - dt
+        if state._bossDialogue.timer <= 0 then
+            state._bossDialogue = nil
+        end
+    end
+
+    -- P14.2: 每周挑战 - damage/resource 更新
+    if state.weeklyChallenge and not state.weeklyChallenge.completed then
+        if state.weeklyChallenge.type == "damage" then
+            state.weeklyChallenge.progress = math.floor(state.totalDmgDealt or 0)
+            if state.weeklyChallenge.progress >= state.weeklyChallenge.target then
+                state.weeklyChallenge.completed = true
+                Core.addToast(state, "🎯 社区挑战完成: " .. state.weeklyChallenge.name, { 0, 255, 180 })
+            end
+        elseif state.weeklyChallenge.type == "resource" then
+            local tc = state.totalCollected or {}
+            state.weeklyChallenge.progress = (tc.metal or 0) + (tc.energy or 0)
+            if state.weeklyChallenge.progress >= state.weeklyChallenge.target then
+                state.weeklyChallenge.completed = true
+                Core.addToast(state, "🎯 社区挑战完成: " .. state.weeklyChallenge.name, { 0, 255, 180 })
+            end
+        end
+    end
+
     -- Phase 9.1: 动态BGM系统 - 根据战斗状态切换BGM
     state._bgmCheckTimer = (state._bgmCheckTimer or 0) + dt
     if state._bgmCheckTimer >= 0.5 then
@@ -625,6 +678,17 @@ function Core.onNewDay(state)
         for _ = 1, extraWaves do
             Core.spawnEnemy(state, "guard", "inner")
             Core.spawnEnemy(state, "flanker", "middle")
+        end
+    end
+
+    -- P12.3: 星海编年史解锁（按天数解锁）
+    state.chronoUnlocked = state.chronoUnlocked or {}
+    for _, c in ipairs(Data.CHRONICLES) do
+        if c.unlockDay and state.day >= c.unlockDay and not state.chronoUnlocked[c.id] then
+            state.chronoUnlocked[c.id] = true
+            Core.addFloatingText(state, state.player.x, state.player.y - 40,
+                "📖 新资料解锁: " .. c.title, { 255, 220, 100 }, 2.0)
+            Core.addToast(state, "📖 新资料: " .. c.title, { 255, 220, 100 })
         end
     end
 
@@ -694,10 +758,23 @@ function Core.updateToasts(state, dt)
     end
 end
 
--- P10.3: 粒子上限
+-- P10.3 & P17.1: 粒子上限 + 距离剔除
 local MAX_PARTICLES = 200
+local PARTICLE_CULL_DIST = 1200
+local FAR_DIST = 800
+
+-- P17.2: 空间分区碰撞检测 - Grid尺寸
+local GRID_CELL = 200
 
 function Core.spawnParticles(state, x, y, color, count)
+    -- P17.1: 距离剔除 - 只有靠近玩家的粒子才被生成
+    if state.player then
+        local dx = x - state.player.x
+        local dy = y - state.player.y
+        if dx * dx + dy * dy > PARTICLE_CULL_DIST * PARTICLE_CULL_DIST then
+            count = math.floor((count or 6) * 0.3)
+        end
+    end
     for i = 1, (count or 6) do
         if #state.particles >= MAX_PARTICLES then break end
         local a = rand(0, TAU)
@@ -718,6 +795,14 @@ end
 function Core.spawnExplosion(state, x, y, color, count, spd)
     count = count or 20
     spd = spd or 250
+    -- P17.1: 距离剔除 - 远处爆炸粒子减少
+    if state.player then
+        local dx = x - state.player.x
+        local dy = y - state.player.y
+        if dx * dx + dy * dy > FAR_DIST * FAR_DIST then
+            count = math.floor(count * 0.5)
+        end
+    end
     for i = 1, count do
         if #state.particles >= MAX_PARTICLES then break end
         local a = rand(0, TAU)

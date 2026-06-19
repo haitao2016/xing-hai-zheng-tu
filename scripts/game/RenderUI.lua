@@ -134,6 +134,33 @@ function M.drawHUD(vg, state, sw, sh)
 
     -- 小地图（右下角）
     M.drawMinimap(vg, state, sw, sh)
+
+    -- P14.2: 每周挑战进度显示（顶部中央右侧）
+    if state.weeklyChallenge and state.weeklyChallenge.id then
+        local wc = state.weeklyChallenge
+        local chalX = sw / 2 + 160
+        local chalY = 18
+        nvgFontFace(vg, "sans")
+        nvgFontSize(vg, 10)
+        nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)
+        local statusColor = wc.completed and { 0, 255, 180 } or { 200, 200, 255 }
+        nvgFillColor(vg, nvgRGBA(statusColor[1], statusColor[2], statusColor[3], 200))
+        nvgText(vg, chalX, chalY, "🎯 " .. wc.name)
+        -- 进度条
+        local barW = 120
+        local barH = 4
+        local barX = chalX - barW / 2
+        local barY = chalY + 8
+        nvgBeginPath(vg)
+        nvgRect(vg, barX, barY, barW, barH)
+        nvgFillColor(vg, nvgRGBA(30, 40, 60, 180))
+        nvgFill(vg)
+        local progress = math.min(1, (wc.progress or 0) / (wc.target or 1))
+        nvgBeginPath(vg)
+        nvgRect(vg, barX, barY, barW * progress, barH)
+        nvgFillColor(vg, nvgRGBA(statusColor[1], statusColor[2], statusColor[3], 200))
+        nvgFill(vg)
+    end
 end
 
 -- ============================================================================
@@ -839,8 +866,32 @@ function M.drawSettings(vg, sw, sh, settings, settingSliders)
     nvgFontSize(vg, 9)
     nvgFillColor(vg, nvgRGBA(80, 90, 110, 120))
     nvgTextAlign(vg, NVG_ALIGN_RIGHT + NVG_ALIGN_BOTTOM)
-    nvgText(vg, sw - 10, sh - 6, "v0.6.0")
+    nvgText(vg, sw - 10, sh - 6, "v0.8.0")
     nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)
+
+    -- P12.2: Boss对话显示
+    if state._bossDialogue and state._bossDialogue.timer > 0 then
+        local d = state._bossDialogue
+        local alpha = d.alpha
+        local cx = sw / 2
+        local cy = sh - 160
+
+        -- 背景框
+        local textW = math.min(500, nvgTextBounds(vg, cx, cy, d.text, nil) or 200)
+        nvgBeginPath(vg)
+        nvgRoundedRect(vg, cx - textW / 2 - 20, cy - 20, textW + 40, 40, 8)
+        nvgFillColor(vg, nvgRGBA(10, 15, 30, 200 * alpha))
+        nvgFill(vg)
+        nvgStrokeColor(vg, nvgRGBA(d.color[1], d.color[2], d.color[3], 150 * alpha))
+        nvgStrokeWidth(vg, 1)
+        nvgStroke(vg)
+
+        -- 对话文本
+        nvgFontSize(vg, 16)
+        nvgFillColor(vg, nvgRGBA(d.color[1], d.color[2], d.color[3], 255 * alpha))
+        nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)
+        nvgText(vg, cx, cy, d.text)
+    end
 end
 
 -- ============================================================================
@@ -1024,6 +1075,36 @@ function M.drawGameOver(vg, state, sw, sh)
                 nvgText(vg, relicX + i * 36, relicY + 18, relicDef.icon)
             end
         end
+    end
+
+    -- P14.1: 成就展示 - 战绩卡片补充
+    if state.achievements and #state.achievements > 0 then
+        local achY = (state.relics and #state.relics > 0 and statY + #stats * lineH + 52 or statY + #stats * lineH + 10)
+        nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)
+        nvgFontSize(vg, 11)
+        nvgFillColor(vg, nvgRGBA(255, 200, 100, 180))
+        nvgText(vg, sw / 2, achY, "本局成就 " .. tostring(#state.achievements))
+        local maxIcons = 6
+        local achX = sw / 2 - math.min(#state.achievements, maxIcons) * 12
+        for i = 1, math.min(#state.achievements, maxIcons) do
+            local achId = state.achievements[i]
+            nvgFontSize(vg, 16)
+            nvgFillColor(vg, nvgRGBA(255, 215, 0, 220))
+            nvgText(vg, achX + i * 24, achY + 18, "🏆")
+        end
+        if #state.achievements > maxIcons then
+            nvgFontSize(vg, 11)
+            nvgFillColor(vg, nvgRGBA(200, 200, 200, 180))
+            nvgText(vg, achX + (maxIcons + 1) * 24 + 8, achY + 18, "+" .. tostring(#state.achievements - maxIcons))
+        end
+    end
+
+    -- P14.2: 社区挑战奖励展示
+    if state.weeklyChallenge and state.weeklyChallenge.completed then
+        local chalY = (state.relics and #state.relics > 0 and statY + #stats * lineH + 88 or statY + #stats * lineH + 50)
+        nvgFontSize(vg, 11)
+        nvgFillColor(vg, nvgRGBA(0, 255, 180, 220))
+        nvgText(vg, sw / 2, chalY, "🎯 " .. (state.weeklyChallenge.name or "社区挑战") .. " 完成!")
     end
 
     -- 评分
