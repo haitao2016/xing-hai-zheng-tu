@@ -141,6 +141,23 @@ function Start()
     -- 初始化音效系统
     GameAudio.init()
 
+    -- Phase 26: 加载 Mod 配置与注册 Mod
+    pcall(function()
+        local modDir = "game/../mods/"
+        local exampleMod, err = loadfile(modDir .. "example_mod.lua")
+        if exampleMod then
+            local ok, mod = pcall(exampleMod)
+            if ok and type(mod) == "table" and Data.registerMod then
+                local registered, errMsg = Data.registerMod(mod)
+                if registered then
+                    log:Write(LOG_INFO, "[StarSea] Mod loaded: " .. mod.name .. " v" .. mod.version)
+                else
+                    log:Write(LOG_ERROR, "[StarSea] Mod register failed: " .. tostring(errMsg))
+                end
+            end
+        end
+    end)
+
     -- P8.1: 加载本地存档
     local loadedData = SaveSystem.load()
     if loadedData then
@@ -1020,6 +1037,14 @@ function HandleNanoVGRender(eventType, eventData)
         Render.drawAllyModeIndicator(vg, gameState, sw, sh)
         Render.drawCombo(vg, gameState, sw, sh)
         Render.drawRelicSlots(vg, gameState, sw, sh)
+        Render.drawAchievementPopups(vg, gameState, sw, sh)
+        Render.drawToasts(vg, gameState, sw, sh)
+
+        -- Phase 25: 触控按钮（移动设备）
+        if Render.drawTouchControls and Render.isTouchDevice and Render.isTouchDevice(sw, sh) then
+            Render.drawTouchControls(vg, sw, sh, gameState,
+                gameState.skills and gameState.skills.cooldowns or {})
+        end
         Render.drawAchievementPopups(vg, gameState, sw, sh)
         Render.drawToasts(vg, gameState, sw, sh)
 

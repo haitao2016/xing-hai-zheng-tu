@@ -2165,4 +2165,209 @@ function M.drawModManager(vg, sw, sh, selectedIdx, mods)
     nvgText(vg, sw / 2, sh - 30, "Mod 总数: " .. #modList)
 end
 
+-- ============================================================================
+-- Phase 25: 移动端触控输入系统
+-- 仅在触屏设备或开启触控模式时显示
+-- ============================================================================
+
+-- 触控按钮布局定义
+M.TOUCH_LAYOUT = {
+    -- 左下角虚拟摇杆
+    joystick = {
+        base = { x = 140, y = 0, radius = 90 },    -- y 从底部计算
+        knob = { radius = 40 },
+        active = false,
+        dx = 0, dy = 0,
+    },
+    -- 右侧开火按钮
+    fire = {
+        x = 0, y = 0, radius = 55,                 -- 位置从右下计算
+        active = false,
+        label = "开火",
+        color = { 255, 100, 80 },
+    },
+    -- 技能按钮 1-5 (在开火按钮上方)
+    skills = {
+        { key = "1", id = "skill_dash",   name = "冲刺", color = { 120, 220, 255 }, offsetY = 0,    offsetX = -20 },
+        { key = "2", id = "skill_shock",  name = "冲击波", color = { 255, 200, 100 }, offsetY = -30,  offsetX = 60 },
+        { key = "3", id = "skill_slow",   name = "减速", color = { 200, 150, 255 }, offsetY = -90,  offsetX = 100 },
+        { key = "4", id = "skill_shield", name = "护盾", color = { 120, 255, 160 }, offsetY = -150, offsetX = 60 },
+        { key = "5", id = "skill_strike", name = "轨道", color = { 255, 100, 100 }, offsetY = -180, offsetX = -20 },
+    },
+    -- 辅助按钮 (屏幕顶部)
+    aux = {
+        { key = "T", label = "科技", x = 0, y = 0, radius = 34, color = { 150, 200, 255 } },
+        { key = "R", label = "中继", x = 0, y = 0, radius = 34, color = { 200, 150, 255 } },
+        { key = "E", label = "交互", x = 0, y = 0, radius = 34, color = { 255, 200, 150 } },
+    },
+}
+
+-- 判断是否需要显示触控 UI（根据屏幕尺寸或运行环境）
+function M.isTouchDevice(sw, sh)
+    -- 小屏设备（短边小于 600 视为移动设备）或竖屏
+    local shortSide = math.min(sw, sh)
+    local isPortrait = sh > sw * 1.2
+    return isPortrait or shortSide < 700
+end
+
+-- 绘制虚拟摇杆
+function M.drawTouchJoystick(vg, sw, sh, js)
+    local baseX = js.base.x
+    local baseY = sh - js.base.y - 120
+    -- 外圈
+    nvgBeginPath(vg)
+    nvgCircle(vg, baseX, baseY, js.base.radius)
+    nvgFillColor(vg, nvgRGBA(20, 30, 50, 120))
+    nvgFill(vg)
+    nvgStrokeColor(vg, nvgRGBA(120, 180, 255, 180))
+    nvgStrokeWidth(vg, 2)
+    nvgStroke(vg)
+
+    -- 内圈（带方向偏移）
+    local knobX = baseX + js.dx * js.base.radius * 0.7
+    local knobY = baseY + js.dy * js.base.radius * 0.7
+    nvgBeginPath(vg)
+    nvgCircle(vg, knobX, knobY, js.knob.radius)
+    if js.active then
+        nvgFillColor(vg, nvgRGBA(100, 200, 255, 200))
+    else
+        nvgFillColor(vg, nvgRGBA(80, 140, 220, 160))
+    end
+    nvgFill(vg)
+    nvgStrokeColor(vg, nvgRGBA(200, 230, 255, 200))
+    nvgStrokeWidth(vg, 2)
+    nvgStroke(vg)
+
+    -- 方向指示箭头（当有输入时）
+    if js.active and (math.abs(js.dx) > 0.05 or math.abs(js.dy) > 0.05) then
+        nvgBeginPath(vg)
+        nvgMoveTo(vg, baseX, baseY)
+        nvgLineTo(vg, baseX + js.dx * js.base.radius, baseY + js.dy * js.base.radius)
+        nvgStrokeColor(vg, nvgRGBA(255, 255, 255, 120))
+        nvgStrokeWidth(vg, 3)
+        nvgStroke(vg)
+    end
+end
+
+-- 绘制圆形按钮
+function M.drawTouchButton(vg, cx, cy, radius, label, color, active)
+    -- 外圈
+    nvgBeginPath(vg)
+    nvgCircle(vg, cx, cy, radius)
+    if active then
+        nvgFillColor(vg, nvgRGBA(color[1], color[2], color[3], 220))
+    else
+        nvgFillColor(vg, nvgRGBA(color[1], color[2], color[3], 120))
+    end
+    nvgFill(vg)
+    nvgStrokeColor(vg, nvgRGBA(color[1], color[2], color[3], 200))
+    nvgStrokeWidth(vg, 2)
+    nvgStroke(vg)
+
+    -- 内圈高光
+    nvgBeginPath(vg)
+    nvgCircle(vg, cx - radius * 0.15, cy - radius * 0.15, radius * 0.35)
+    nvgFillColor(vg, nvgRGBA(255, 255, 255, 40))
+    nvgFill(vg)
+
+    -- 文字标签
+    nvgFontFace(vg, "sans")
+    nvgFontSize(vg, 14)
+    nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)
+    nvgFillColor(vg, nvgRGBA(255, 255, 255, 220))
+    nvgText(vg, cx, cy, label)
+end
+
+-- 完整触控 HUD 入口
+function M.drawTouchControls(vg, sw, sh, state, cooldowns)
+    if not M.isTouchDevice(sw, sh) then return end
+
+    local layout = M.TOUCH_LAYOUT
+
+    -- 绘制虚拟摇杆
+    M.drawTouchJoystick(vg, sw, sh, layout.joystick)
+
+    -- 绘制开火按钮（右下）
+    local fireX = sw - 140
+    local fireY = sh - 120
+    M.drawTouchButton(vg, fireX, fireY, layout.fire.radius,
+        layout.fire.label, layout.fire.color, layout.fire.active)
+
+    -- 绘制 5 个技能按钮（围绕开火按钮扇形分布）
+    for i, sk in ipairs(layout.skills) do
+        local bx = fireX + sk.offsetX
+        local by = fireY + sk.offsetY - 60
+        local cd = 0
+        if cooldowns and cooldowns[sk.id] then cd = cooldowns[sk.id] end
+        -- 冷却中半透明遮罩
+        M.drawTouchButton(vg, bx, by, 32, sk.name, sk.color, false)
+        if cd > 0 then
+            nvgBeginPath(vg)
+            nvgCircle(vg, bx, by, 32)
+            nvgFillColor(vg, nvgRGBA(0, 0, 0, 120))
+            nvgFill(vg)
+            nvgFontSize(vg, 11)
+            nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)
+            nvgFillColor(vg, nvgRGBA(255, 255, 255, 220))
+            nvgText(vg, bx, by, string.format("%.1f", cd))
+        end
+    end
+
+    -- 辅助按钮（右上纵向排列）
+    local baseX = sw - 50
+    local baseY = 100
+    for i, aux in ipairs(layout.aux) do
+        M.drawTouchButton(vg, baseX, baseY + (i - 1) * 78, aux.radius,
+            aux.label, aux.color, false)
+    end
+end
+
+-- 触控点命中检测（用于 HandleTouchBegin/Move）
+function M.hitTestTouchControl(x, y, sw, sh, skillKeys)
+    if not M.isTouchDevice(sw, sh) then return nil end
+    local layout = M.TOUCH_LAYOUT
+
+    -- 摇杆命中
+    local jsX = layout.joystick.base.x
+    local jsY = sh - layout.joystick.base.y - 120
+    local djs = math.sqrt((x - jsX) ^ 2 + (y - jsY) ^ 2)
+    if djs < layout.joystick.base.radius + 20 then
+        local dx = (x - jsX) / layout.joystick.base.radius
+        local dy = (y - jsY) / layout.joystick.base.radius
+        local mag = math.sqrt(dx * dx + dy * dy)
+        if mag > 1.0 then
+            dx = dx / mag
+            dy = dy / mag
+        end
+        return "joystick", dx, dy
+    end
+
+    -- 开火按钮
+    local fireX = sw - 140
+    local fireY = sh - 120
+    if math.sqrt((x - fireX) ^ 2 + (y - fireY) ^ 2) < layout.fire.radius then
+        return "fire", 1, 0
+    end
+
+    -- 技能按钮
+    for i, sk in ipairs(layout.skills) do
+        local bx = fireX + sk.offsetX
+        local by = fireY + sk.offsetY - 60
+        if math.sqrt((x - bx) ^ 2 + (y - by) ^ 2) < 34 then
+            return "skill", i, sk.id
+        end
+    end
+
+    -- 辅助按钮
+    local baseX = sw - 50
+    local baseY = 100
+    for i, aux in ipairs(layout.aux) do
+        if math.sqrt((x - baseX) ^ 2 + (y - (baseY + (i - 1) * 78)) ^ 2) < aux.radius then
+            return "aux", i, aux.key
+        end
+    end
+
+    return nil
+end
+
 return M

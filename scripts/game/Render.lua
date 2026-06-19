@@ -62,5 +62,12 @@ Render.drawCombo            = RenderUI.drawCombo
 Render.drawRelicSlots       = RenderUI.drawRelicSlots
 Render.drawStats            = RenderUI.drawStats
 Render.drawModManager       = RenderUI.drawModManager
+Render.drawDifficultySelect = RenderUI.drawDifficultySelect
+Render.drawCampaignSelect   = RenderUI.drawCampaignSelect
+Render.drawComboBanner      = RenderUI.drawComboBanner
+Render.drawScreenFlash      = RenderUI.drawScreenFlash
+Render.drawTouchControls    = RenderUI.drawTouchControls
+Render.hitTestTouchControl  = RenderUI.hitTestTouchControl
+Render.isTouchDevice        = RenderUI.isTouchDevice
 
 return Render
