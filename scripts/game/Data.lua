@@ -1030,7 +1030,7 @@ Data.DIFFICULTY_LEVELS = {
         multipliers = {
             enemyHp = 1.35, enemyDmg = 1.25, enemySpeed = 1.1,
             spawnRate = 1.2, resourceGain = 0.85, blueprintGain = 0.8,
-            playerDmg = 1.0, playerHp = 0.9,
+            playerDmg = 1.05, playerHp = 0.9,
         },
         unlockFlag = { completedCh1 = true },
         metaXpGain = 1.5,
@@ -1043,9 +1043,9 @@ Data.DIFFICULTY_LEVELS = {
         desc = "只有精英中的精英才能生还。一击失误，即是毁灭。",
         descEn = "Only the elite survive. One mistake, one death.",
         multipliers = {
-            enemyHp = 1.8, enemyDmg = 1.6, enemySpeed = 1.2,
-            spawnRate = 1.4, resourceGain = 0.7, blueprintGain = 0.6,
-            playerDmg = 1.1, playerHp = 0.75,
+            enemyHp = 1.65, enemyDmg = 1.5, enemySpeed = 1.18,
+            spawnRate = 1.35, resourceGain = 0.7, blueprintGain = 0.65,
+            playerDmg = 1.1, playerHp = 0.85,
         },
         unlockFlag = { completedCh2 = true, hardClear = true },
         metaXpGain = 2.5,
@@ -1155,7 +1155,7 @@ Data.ACTIVE_SKILLS = {
     {
         id = "skill_dash",
         name = "量子冲刺",
-        key = "Q",
+        key = "1",
         energyCost = 30,
         cooldown = 2.0,
         desc = "向当前移动方向瞬移200距离，获得0.8秒无敌。",
@@ -1165,7 +1165,7 @@ Data.ACTIVE_SKILLS = {
     {
         id = "skill_shock",
         name = "冲击波",
-        key = "W",
+        key = "2",
         energyCost = 50,
         cooldown = 4.0,
         desc = "释放环形能量波，对范围内敌人造成60伤害并击退。",
@@ -1177,7 +1177,7 @@ Data.ACTIVE_SKILLS = {
     {
         id = "skill_slow",
         name = "时间减速",
-        key = "E",
+        key = "3",
         energyCost = 70,
         cooldown = 8.0,
         desc = "扭曲局部时间，所有敌人减速50%，持续4秒。",
@@ -1189,7 +1189,7 @@ Data.ACTIVE_SKILLS = {
     {
         id = "skill_shield",
         name = "护盾充能",
-        key = "R",
+        key = "4",
         energyCost = 40,
         cooldown = 6.0,
         desc = "立即回复25最大生命，获得1层临时护盾持续3秒。",
@@ -1201,7 +1201,7 @@ Data.ACTIVE_SKILLS = {
     {
         id = "skill_strike",
         name = "轨道打击",
-        key = "T",
+        key = "5",
         energyCost = 80,
         cooldown = 12.0,
         desc = "呼叫轨道炮，在鼠标位置落下毁灭性一击，造成200范围伤害。",

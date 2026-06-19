@@ -61,6 +61,7 @@ Render.drawAllyModeIndicator = RenderUI.drawAllyModeIndicator
 Render.drawCombo            = RenderUI.drawCombo
 Render.drawRelicSlots       = RenderUI.drawRelicSlots
 Render.drawStats            = RenderUI.drawStats
+Render.drawSettings         = RenderUI.drawSettings
 Render.drawModManager       = RenderUI.drawModManager
 Render.drawDifficultySelect = RenderUI.drawDifficultySelect
 Render.drawCampaignSelect   = RenderUI.drawCampaignSelect

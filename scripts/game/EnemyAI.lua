@@ -23,8 +23,21 @@ function EnemyAI.spawnEnemy(state, Core, kind, zone)
     local ang = rand(0, TAU)
     local r = rand(300, 2000)
     local diff = Core.getDifficultyScale(state)
-    local dayScale = diff.hp
-    local scaledHp = math.floor(cfg.hp * dayScale)
+    local scaledHp = math.floor(cfg.hp * diff.hp)
+    local scaledDmg = math.floor(cfg.dmg * diff.dmg)
+    -- 创建副本表，避免修改原始 Data.ENEMY_TYPES
+    local eCfg = {
+        hp = scaledHp,
+        dmg = scaledDmg,
+        speed = cfg.speed,
+        size = cfg.size,
+        color = cfg.color,
+        fire = cfg.fire,
+        bulletSpeed = cfg.bulletSpeed,
+        range = cfg.range,
+        behavior = cfg.behavior,
+        reward = cfg.reward,
+    }
     local e = {
         kind = kind, type = kind,
         x = math.cos(ang) * r,
@@ -33,11 +46,12 @@ function EnemyAI.spawnEnemy(state, Core, kind, zone)
         angle = rand(0, TAU),
         hp = scaledHp, hpMax = scaledHp,
         radius = cfg.size or 12,
-        cfg = cfg,
+        cfg = eCfg,
         fireCd = rand(0, cfg.fire),
         hitFlash = 0,
         isBoss = false,
-        dayScale = dayScale,
+        dayScale = diff.hp,
+        dmgScale = diff.dmg,
     }
     Systems.tryApplyAffix(e, state.day)
     table.insert(state.enemies, e)

@@ -43,6 +43,7 @@ function Core.newGame(playerName, factionId, gameMode)
             shield = 0, shieldMax = 0,
             fireCd = 0, hitFlash = 0,
             speed = 220, fireRate = 0.25,
+            energy = 100, energyMax = 100,
         },
         -- 相机
         cam = { x = 0, y = 0 },
@@ -70,7 +71,13 @@ function Core.newGame(playerName, factionId, gameMode)
         },
         -- P20.1: 主动技能状态
         skills = {
-            unlocked = { skill_dash = true },  -- 默认解锁冲刺
+            unlocked = {
+                skill_dash = true,
+                skill_shock = true,
+                skill_slow = true,
+                skill_shield = true,
+                skill_strike = true,
+            },
             cooldowns = {},                     -- id -> remaining seconds
             slowRemaining = 0,                  -- 时间减速剩余
             invulnRemaining = 0,                -- 无敌剩余
@@ -97,6 +104,8 @@ function Core.newGame(playerName, factionId, gameMode)
             commander = 0, engineer = 0, scout = 0,
         },
         flags = {},
+        playerDied = false,
+        isDailyChallenge = false,
         -- 阵营
         factionId = factionId,
         faction = factionId and Data.getFaction(factionId) or nil,
@@ -128,6 +137,9 @@ function Core.newGame(playerName, factionId, gameMode)
         shakeTime = 0, shakeIntensity = 0, shakeMaxTime = 0,
         shakeOffX = 0, shakeOffY = 0, shakePhase = 0,
         shakeDirX = 0, shakeDirY = 0,  -- 方向性震动
+        -- Phase 23: Hitstop / ScreenFlash FX
+        hitstop = 0,
+        _screenFlash = {},
         -- Phase 6.4: 相机前瞻
         camLookAheadX = 0, camLookAheadY = 0,
         -- P3.2 统计
@@ -296,6 +308,11 @@ function Core.update(state, dt, inputState)
     local scaledDt = dt * state.timeScale
     -- 技能冷却更新
     Core.updateSkills(state, scaledDt)
+    -- P20: 能量回复（15/s，乘以元进度加成）
+    if state.player.energy and state.player.energyMax then
+        local regenRate = 15 * (state.stats.energyRegenBonus or 1)
+        state.player.energy = math.min(state.player.energyMax, state.player.energy + regenRate * dt)
+    end
     -- 连击衰减
     if state.comboRank.count > 0 then
         state.comboRank.decayTimer = state.comboRank.decayTimer - dt
@@ -307,6 +324,9 @@ function Core.update(state, dt, inputState)
     end
     -- 波次系统（在标准刷怪逻辑旁并行）
     Core.updateWaves(state, scaledDt)
+
+    -- Phase 23: Camera FX update
+    Core.updateCameraFX(state, dt)
 
     -- Phase 6: Hitstop - 击杀精英/Boss时短暂冻结
     if state.hitstop and state.hitstop > 0 then
@@ -922,6 +942,15 @@ function Core.getDifficultyScale(state)
         bossHp = bossHp + extra * D.bossHpScale * 2.5
     end
 
+    -- P19: 应用难度选择倍率（新手/标准/困难/虚空）
+    if state.difficultyMul then
+        hp = hp * (state.difficultyMul.enemyHp or 1)
+        dmg = dmg * (state.difficultyMul.enemyDmg or 1)
+        speed = speed * (state.difficultyMul.enemySpeed or 1)
+        spawnRate = spawnRate * (state.difficultyMul.spawnRate or 1)
+        bossHp = bossHp * (state.difficultyMul.enemyHp or 1)
+    end
+
     return {
         hp = hp,
         dmg = dmg,
@@ -1076,11 +1105,29 @@ end
 
 function Core.applyMetaUpgrades(state)
     if not state.meta or not state.meta.upgrades then return end
+    -- 先重置所有元进度加成到基准值，防止多次调用造成累积
+    state.stats.maxHpBonus = 1
+    state.stats.dmgBonus = 1
+    state.stats.energyRegenBonus = 1
+    state.stats.resourceBonus = 1
+    state.stats.startingShields = 0
+    state.stats.extraRelicSlots = 0
     for id, lvl in pairs(state.meta.upgrades) do
         if lvl and lvl > 0 then
             local up = Data.getMetaUpgrade(id)
             if up and up.apply then up.apply(state, lvl) end
         end
+    end
+    -- 根据最大生命加成更新玩家 hpMax
+    if state.stats.maxHpBonus and state.stats.maxHpBonus ~= 1 then
+        local baseHp = 100  -- 默认基础生命
+        state.player.hpMax = math.floor(baseHp * state.stats.maxHpBonus)
+        state.player.hp = state.player.hpMax
+    end
+    -- 起始护盾
+    if state.stats.startingShields and state.stats.startingShields > 0 then
+        state.player.shield = state.stats.startingShields * 20
+        state.player.shieldMax = math.max(state.player.shieldMax or 0, state.player.shield)
     end
 end
 

@@ -358,6 +358,26 @@ function HandleTouchBegin(eventType, eventData)
     mouseY = eventData:GetInt("Y")
     mousePressed = true
     mouseJustPressed = true
+
+    -- Phase 25: 游戏内触控按钮命中检测（技能、开火等）
+    if currentState == STATE_GAME and gameState and Render.hitTestTouchControl then
+        local dpr = graphics and graphics.GetDPR and graphics:GetDPR() or 1
+        local tx = mouseX / dpr
+        local ty = mouseY / dpr
+        local sw = screenW / dpr
+        local sh = screenH / dpr
+        if Render.isTouchDevice and Render.isTouchDevice(sw, sh) then
+            local hit, arg1, arg2 = Render.hitTestTouchControl(tx, ty, sw, sh)
+            if hit == "skill" and arg2 and Core.useSkill then
+                Core.useSkill(gameState, arg2)
+                return  -- 不再转发为普通点击
+            elseif hit == "fire" then
+                -- 开火按钮由渲染循环中的 mousePressed 自动处理，无需额外逻辑
+                return
+            end
+        end
+    end
+
     HandleClick(mouseX, mouseY)
 end
 
@@ -467,6 +487,12 @@ function HandleKeyDown(eventType, eventData)
         GameAudio.playClick()
         Leaderboard.fetchRankList()
         currentState = STATE_RANK
+    end
+
+    -- P18: 菜单状态下按 Enter 进入难度选择界面
+    if currentState == STATE_MENU and (key == KEY_ENTER or key == KEY_RETURN) then
+        GameAudio.playClick()
+        currentState = STATE_DIFFICULTY
     end
 
     -- Phase 26: Mod 管理器按键处理
@@ -1045,8 +1071,6 @@ function HandleNanoVGRender(eventType, eventData)
             Render.drawTouchControls(vg, sw, sh, gameState,
                 gameState.skills and gameState.skills.cooldowns or {})
         end
-        Render.drawAchievementPopups(vg, gameState, sw, sh)
-        Render.drawToasts(vg, gameState, sw, sh)
 
         -- 广告复活弹窗
         if showRevivePrompt then
