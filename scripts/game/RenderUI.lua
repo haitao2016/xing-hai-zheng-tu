@@ -20,6 +20,61 @@ local menuStars = nil
 -- HUD（血条/护盾/分数/资源）
 -- ============================================================================
 function M.drawHUD(vg, state, sw, sh)
+    -- Phase D: 低血量警告特效
+    if state and state.player and state.player.hpMax and state.player.hpMax > 0 then
+        local hpRatio = state.player.hp / state.player.hpMax
+        if hpRatio < 0.3 then
+            local intensity = (1 - hpRatio / 0.3)
+            local t = (state and state.dayTimer) or 0
+            local pulseAlpha = 100 + math.floor(math.sin(t * 3) * 40)
+            local alpha = math.floor(pulseAlpha * intensity)
+
+            -- 屏幕边缘红色渐晕（四角）
+            local cornerSize = 80
+            -- 左上
+            nvgBeginPath(vg)
+            nvgMoveTo(vg, 0, 0)
+            nvgLineTo(vg, cornerSize, 0)
+            nvgLineTo(vg, 0, cornerSize)
+            nvgClosePath(vg)
+            nvgFillColor(vg, nvgRGBA(255, 30, 30, alpha))
+            nvgFill(vg)
+            -- 右上
+            nvgBeginPath(vg)
+            nvgMoveTo(vg, sw, 0)
+            nvgLineTo(vg, sw - cornerSize, 0)
+            nvgLineTo(vg, sw, cornerSize)
+            nvgClosePath(vg)
+            nvgFillColor(vg, nvgRGBA(255, 30, 30, alpha))
+            nvgFill(vg)
+            -- 左下
+            nvgBeginPath(vg)
+            nvgMoveTo(vg, 0, sh)
+            nvgLineTo(vg, cornerSize, sh)
+            nvgLineTo(vg, 0, sh - cornerSize)
+            nvgClosePath(vg)
+            nvgFillColor(vg, nvgRGBA(255, 30, 30, alpha))
+            nvgFill(vg)
+            -- 右下
+            nvgBeginPath(vg)
+            nvgMoveTo(vg, sw, sh)
+            nvgLineTo(vg, sw - cornerSize, sh)
+            nvgLineTo(vg, sw, sh - cornerSize)
+            nvgClosePath(vg)
+            nvgFillColor(vg, nvgRGBA(255, 30, 30, alpha))
+            nvgFill(vg)
+
+            -- 中央警告文字（非常低血量时）
+            if hpRatio < 0.15 then
+                nvgFontFace(vg, "sans")
+                nvgFontSize(vg, 18)
+                nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)
+                nvgFillColor(vg, nvgRGBA(255, 80, 80, math.floor(200 * intensity)))
+                nvgText(vg, sw / 2, sh * 0.08, "⚠ 船体损伤严重！")
+            end
+        end
+    end
+
     local p = state.player
 
     local hitShake = 0
@@ -276,6 +331,12 @@ function M.drawHUD(vg, state, sw, sh)
     -- 任务面板（右侧中部）
     M.drawQuestPanel(vg, state, sw, sh)
 
+    -- Phase A: 支线任务面板
+    M.drawSideQuestPanel(vg, state, sw, sh)
+
+    -- Phase A: NPC 对话框
+    M.drawDialogBox(vg, state, sw, sh)
+
     -- 小地图（右下角）
     M.drawMinimap(vg, state, sw, sh)
 
@@ -372,6 +433,123 @@ function M.drawQuestPanel(vg, state, sw, sh)
         nvgFillColor(vg, nvgRGBA(255, 200, 80, 160))
         nvgText(vg, px + panelW - 8, py + 5, string.format("D%d-%d", activeQuest.days[1], activeQuest.days[2]))
     end
+end
+
+-- ============================================================================
+-- Phase A: 支线任务面板
+-- ============================================================================
+function M.drawSideQuestPanel(vg, state, sw, sh)
+    if not state.sideQuests or not state.sideQuests.active or #state.sideQuests.active == 0 then return end
+
+    local panelW = 220
+    local itemH = 42
+    local gap = 4
+    local panelH = 28 + #state.sideQuests.active * (itemH + gap)
+    local panelX = sw - panelW - 16
+    local panelY = 135
+
+    nvgFontFace(vg, "sans")
+    nvgBeginPath(vg)
+    nvgRoundedRect(vg, panelX, panelY, panelW, panelH, 6)
+    nvgFillColor(vg, nvgRGBA(8, 12, 25, 190))
+    nvgFill(vg)
+    nvgStrokeColor(vg, nvgRGBA(100, 140, 200, 90))
+    nvgStrokeWidth(vg, 1)
+    nvgStroke(vg)
+
+    nvgTextAlign(vg, NVG_ALIGN_LEFT + NVG_ALIGN_TOP)
+    nvgFontSize(vg, 11)
+    nvgFillColor(vg, nvgRGBA(140, 190, 240, 220))
+    nvgText(vg, panelX + 10, panelY + 8, "支线任务")
+
+    local itemY = panelY + 28
+    for _, q in ipairs(state.sideQuests.active) do
+        local isDone = q.completed or false
+        local color = isDone and nvgRGBA(100, 255, 140, 240) or nvgRGBA(230, 230, 255, 230)
+
+        nvgFontSize(vg, 11)
+        nvgFillColor(vg, color)
+        nvgText(vg, panelX + 10, itemY + 2, q.name)
+
+        nvgFontSize(vg, 9)
+        nvgFillColor(vg, nvgRGBA(150, 170, 210, 170))
+        nvgText(vg, panelX + 10, itemY + 16, q.desc)
+
+        if q.target and q.target > 0 then
+            local barW = panelW - 24
+            local barH = 4
+            local barX = panelX + 12
+            local barY = itemY + 30
+            nvgBeginPath(vg)
+            nvgRoundedRect(vg, barX, barY, barW, barH, 2)
+            nvgFillColor(vg, nvgRGBA(40, 50, 70, 180))
+            nvgFill(vg)
+            local ratio = math.min(1, (q.progress or 0) / q.target)
+            nvgBeginPath(vg)
+            nvgRoundedRect(vg, barX, barY, barW * ratio, barH, 2)
+            local c = isDone and { 100, 255, 140 } or { 100, 180, 255 }
+            nvgFillColor(vg, nvgRGBA(c[1], c[2], c[3], 220))
+            nvgFill(vg)
+            nvgFontSize(vg, 8)
+            nvgTextAlign(vg, NVG_ALIGN_RIGHT + NVG_ALIGN_TOP)
+            nvgFillColor(vg, nvgRGBA(180, 200, 230, 160))
+            nvgText(vg, panelX + panelW - 12, itemY + 34, tostring(math.floor(q.progress or 0)) .. "/" .. tostring(q.target))
+        elseif q.targetRank then
+            nvgFontSize(vg, 9)
+            nvgTextAlign(vg, NVG_ALIGN_RIGHT + NVG_ALIGN_TOP)
+            local c = isDone and { 100, 255, 140 } or { 255, 200, 80 }
+            nvgFillColor(vg, nvgRGBA(c[1], c[2], c[3], 200))
+            nvgText(vg, panelX + panelW - 12, itemY + 30, isDone and "达成" or "目标: " .. q.targetRank)
+        end
+
+        if isDone then
+            nvgFontSize(vg, 9)
+            nvgTextAlign(vg, NVG_ALIGN_LEFT + NVG_ALIGN_TOP)
+            nvgFillColor(vg, nvgRGBA(100, 255, 140, 200))
+            nvgText(vg, panelX + panelW - 40, itemY + 2, "完成")
+        end
+
+        itemY = itemY + itemH + gap
+        nvgTextAlign(vg, NVG_ALIGN_LEFT + NVG_ALIGN_TOP)
+    end
+end
+
+-- ============================================================================
+-- Phase A: NPC 对话框
+-- ============================================================================
+function M.drawDialogBox(vg, state, sw, sh)
+    if not state.dialogue or not state.dialogue.active then return end
+    local text = state.dialogue.currentLine
+    local npcName = state.dialogue.npcName or "?"
+    if not text then return end
+
+    nvgFontFace(vg, "sans")
+    local boxW = sw - 240
+    local boxH = 130
+    local boxX = 120
+    local boxY = sh - boxH - 20
+
+    nvgBeginPath(vg)
+    nvgRoundedRect(vg, boxX, boxY, boxW, boxH, 8)
+    nvgFillColor(vg, nvgRGBA(5, 10, 20, 230))
+    nvgFill(vg)
+    nvgStrokeColor(vg, nvgRGBA(120, 180, 255, 160))
+    nvgStrokeWidth(vg, 2)
+    nvgStroke(vg)
+
+    nvgTextAlign(vg, NVG_ALIGN_LEFT + NVG_ALIGN_TOP)
+    nvgFontSize(vg, 15)
+    nvgFillColor(vg, nvgRGBA(255, 220, 100, 240))
+    nvgText(vg, boxX + 16, boxY + 10, npcName)
+
+    nvgFontSize(vg, 17)
+    nvgFillColor(vg, nvgRGBA(240, 245, 255, 240))
+    nvgTextBox(vg, boxX + 16, boxY + 38, boxW - 32, text)
+
+    nvgFontSize(vg, 11)
+    nvgTextAlign(vg, NVG_ALIGN_RIGHT + NVG_ALIGN_BOTTOM)
+    nvgFillColor(vg, nvgRGBA(160, 200, 240, 180))
+    nvgText(vg, boxX + boxW - 16, boxY + boxH - 10, "按 Enter 继续")
 end
 
 -- ============================================================================
@@ -1257,6 +1435,45 @@ function M.drawGameOver(vg, state, sw, sh)
         nvgText(vg, sw / 2, chalY, "🎯 " .. (state.weeklyChallenge.name or "社区挑战") .. " 完成!")
     end
 
+    -- Phase B: 幽灵数据对比
+    local bestGhost = nil
+    local SaveSystem = nil
+    if pcall(require, "game.SaveSystem") then SaveSystem = require("game.SaveSystem") end
+    if SaveSystem and SaveSystem.loadBestGhost then bestGhost = SaveSystem.loadBestGhost() end
+
+    if bestGhost and bestGhost.score and bestGhost.score > 0 then
+        local ghostY = sh * 0.78
+        nvgFontSize(vg, 14)
+        nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)
+        nvgFillColor(vg, nvgRGBA(100, 200, 255, 200))
+        nvgText(vg, sw / 2, ghostY, "★ 幽灵数据 · 历史最佳对比")
+
+        nvgFontSize(vg, 11)
+        local bestScore = bestGhost.score or 0
+        local curScore = state.score or 0
+        local isNewRecord = curScore >= bestScore
+
+        nvgTextAlign(vg, NVG_ALIGN_CENTER + NVG_ALIGN_MIDDLE)
+        if isNewRecord then
+            nvgFillColor(vg, nvgRGBA(255, 220, 80, 255))
+            nvgText(vg, sw / 2, ghostY + 22, "★ 新纪录！超越最佳 " .. tostring(curScore - bestScore) .. " 分")
+        else
+            nvgFillColor(vg, nvgRGBA(180, 200, 220, 180))
+            nvgText(vg, sw / 2, ghostY + 22, "距离最佳还差 " .. tostring(bestScore - curScore) .. " 分")
+        end
+
+        local diffY = ghostY + 44
+        nvgFontSize(vg, 10)
+        nvgFillColor(vg, nvgRGBA(160, 180, 210, 150))
+        local bestDay = bestGhost.day or 0
+        local dayDiff = (state.day or 0) - bestDay
+        local dayLabel = dayDiff > 0 and "+" .. tostring(dayDiff) or tostring(dayDiff)
+        local bestKills = bestGhost.totalKills or 0
+        local killDiff = (state.totalKills or 0) - bestKills
+        local killLabel = killDiff > 0 and "+" .. tostring(killDiff) or tostring(killDiff)
+        nvgText(vg, sw / 2, diffY, "最佳: " .. bestDay .. "天 / " .. bestKills .. "击杀    本局: " .. dayLabel .. " / " .. killLabel)
+    end
+
     -- 评分
     local rating = "D"
     local sc = state.score
@@ -1270,10 +1487,10 @@ function M.drawGameOver(vg, state, sw, sh)
     local ratingColors = { S = { 255, 215, 0 }, A = { 0, 255, 200 }, B = { 100, 200, 255 }, C = { 200, 200, 200 }, D = { 150, 150, 150 } }
     local rc = ratingColors[rating] or ratingColors.D
     nvgFillColor(vg, nvgRGBA(rc[1], rc[2], rc[3], 255))
-    nvgText(vg, sw / 2, sh * 0.76, rating)
+    nvgText(vg, sw / 2, sh * 0.72, rating)
     nvgFontSize(vg, 12)
     nvgFillColor(vg, rgba(C.textDim))
-    nvgText(vg, sw / 2, sh * 0.76 + 24, "综合评价")
+    nvgText(vg, sw / 2, sh * 0.72 + 24, "综合评价")
 
     -- P8.4: 分享卡片边框装饰（让整个画面成为可截图分享的卡片）
     nvgBeginPath(vg)
@@ -1729,6 +1946,24 @@ function M.drawCombo(vg, state, sw, sh)
     local gg = ratio > 0.3 and 200 or 60
     nvgFillColor(vg, nvgRGBA(rg, gg, 0, 220))
     nvgFill(vg)
+
+    -- Phase D: 高连击屏幕震动（由 Core.lua 控制，但这里额外添加粒子效果）
+    if state and state.comboRank and state.comboRank.rank then
+        local r = state.comboRank.rank
+        local extraParticleCount = 0
+        if r == "SSS" then extraParticleCount = 5
+        elseif r == "SS" then extraParticleCount = 3
+        elseif r == "S" then extraParticleCount = 2
+        elseif r == "A" then extraParticleCount = 1
+        end
+        if extraParticleCount > 0 and state.comboRank.color then
+            nvgBeginPath(vg)
+            nvgCircle(vg, sw - 80, 80, 30 + extraParticleCount * 4)
+            nvgStrokeColor(vg, nvgRGBA(state.comboRank.color[1], state.comboRank.color[2], state.comboRank.color[3], 60 + extraParticleCount * 20))
+            nvgStrokeWidth(vg, 1 + extraParticleCount * 0.3)
+            nvgStroke(vg)
+        end
+    end
 end
 
 -- ============================================================================

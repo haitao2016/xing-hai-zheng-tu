@@ -51,6 +51,7 @@ function World.updatePickups(state, Core, dt)
             if state.totalCollected[pk.kind] then
                 state.totalCollected[pk.kind] = state.totalCollected[pk.kind] + pk.amount
             end
+            if Core.onSideQuestResource then Core.onSideQuestResource(state, pk.kind, pk.amount) end
             local pickColor = { 180, 180, 220 }
             local pickName = "+" .. pk.amount .. " 金属"
             if pk.kind == "energy" then pickColor = { 100, 255, 100 }; pickName = "+" .. pk.amount .. " 能量" end
@@ -711,6 +712,7 @@ function World.buildRelay(state, Core)
     state.relayCount = state.relayCount + 1
     table.insert(state.relayStations, { x = state.player.x, y = state.player.y })
     Core.addToast(state, "数据中继站已建造!", { 0, 255, 200 })
+    if Core.onSideQuestBuild then Core.onSideQuestBuild(state, "relay") end
     return true
 end
 

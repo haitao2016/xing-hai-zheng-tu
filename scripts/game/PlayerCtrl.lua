@@ -240,6 +240,7 @@ function PlayerCtrl.damagePlayer(state, Core, rawDmg, srcX, srcY)
         local absorbed = math.min(p.shield, dmg)
         p.shield = p.shield - absorbed
         dmg = dmg - absorbed
+        if Core.onSideQuestShieldLost then Core.onSideQuestShieldLost(state) end
         -- 护盾碎裂视觉效果（护盾被打破时）
         if p.shield <= 0 then
             Audio.playShieldBreak()

@@ -439,6 +439,14 @@ function HandleKeyDown(eventType, eventData)
     end
 
     if currentState == STATE_GAME then
+        -- Phase A: 对话框优先处理
+        if gameState and Core.isDialogueActive and Core.isDialogueActive(gameState) then
+            if key == KEY_ENTER or key == KEY_RETURN or key == KEY_SPACE then
+                Core.advanceDialogue(gameState)
+                return
+            end
+            return  -- 对话期间阻止其他输入
+        end
         -- P20.1: 主动技能（数字键 1-5）
         if SKILL_KEYS[key] and gameState then
             Core.useSkill(gameState, SKILL_KEYS[key])
@@ -896,6 +904,9 @@ function StartGame()
     end
 
     gameState = Core.newGame(S.get("default_faction"), selectedFaction, selectedGameMode)
+    if gameState and Core.triggerDialogue then
+        Core.triggerDialogue(gameState, "commander")
+    end
 
     -- Phase 24: 加载已获得的永久升级等级
     if SaveSystem and SaveSystem.loadMetaUpgrades then

@@ -20,6 +20,19 @@ local M = {}
 function M.drawStars(vg, state, sw, sh)
     local cam = state.cam
 
+    -- Phase B: 根据当前区域绘制背景色
+    local bg = { 10, 12, 20 }
+    if state and state.currentZone and state.currentZone.bgTint then
+        bg = state.currentZone.bgTint
+    elseif state and state.currentZoneId and Data.getZone then
+        local z = Data.getZone(state.currentZoneId)
+        if z and z.bgTint then bg = z.bgTint end
+    end
+    nvgBeginPath(vg)
+    nvgRect(vg, 0, 0, sw, sh)
+    nvgFillColor(vg, nvgRGBA(bg[1], bg[2], bg[3], 255))
+    nvgFill(vg)
+
     -- 第0层：space_bg 贴图铺底（缓慢视差，像远处恒星场）
     local bgImg = Sprites.images["space_bg"]
     if bgImg then

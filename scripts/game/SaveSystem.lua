@@ -229,7 +229,66 @@ function SaveSystem.saveGhost(ghostData)
             file:write(table.concat(lines, "\n"))
             file:close()
         end
+
+        -- Phase B: 同步更新最佳幽灵记录
+        if ghostData and ghostData.score then
+            local bestFile = io.open(M.saveDirectory .. "/ghost_best.json", "r")
+            local curBest = nil
+            if bestFile then
+                local c = bestFile:read("*a")
+                bestFile:close()
+                local g = {}
+                for key, val in string.gmatch(c, '"(%w+)"%s*:%s*([^,%s}]+)') do
+                    if tonumber(val) then g[key] = tonumber(val) else g[key] = string.gsub(val, '"', '') end
+                end
+                curBest = g
+            end
+            if not curBest or not curBest.score or ghostData.score > curBest.score then
+                local out = io.open(M.saveDirectory .. "/ghost_best.json", "w")
+                if out then
+                    local g = ghostData
+                    local lines = { "{",
+                        '  "timestamp": ' .. (g.timestamp or 0) .. ",",
+                        '  "factionId": "' .. tostring(g.factionId or "") .. '",',
+                        '  "difficulty": "' .. tostring(g.difficulty or "standard") .. '",',
+                        '  "day": ' .. (g.daysSurvived or g.day or 0) .. ",",
+                        '  "daysSurvived": ' .. (g.daysSurvived or g.day or 0) .. ",",
+                        '  "totalKills": ' .. (g.totalKills or 0) .. ",",
+                        '  "maxCombo": ' .. (g.maxCombo or 0) .. ",",
+                        '  "score": ' .. (g.score or 0) .. ",",
+                        '  "techCount": ' .. (g.techCount or 0) .. ",",
+                        '  "relicCount": ' .. (g.relicCount or 0) .. ",",
+                        '  "playTime": ' .. (g.playTime or 0),
+                        "}"
+                    }
+                    out:write(table.concat(lines, "\n"))
+                    out:close()
+                end
+            end
+        end
     end)
+end
+
+function SaveSystem.loadBestGhost()
+    if not M.saveDirectory then M.init() end
+    local ok, val = pcall(function()
+        local file = io.open(M.saveDirectory .. "/ghost_best.json", "r")
+        if not file then return nil end
+        local content = file:read("*a")
+        file:close()
+        local g = {}
+        for key, val in string.gmatch(content, '"(%w+)"%s*:%s*([^,%s}]+)') do
+            if tonumber(val) then g[key] = tonumber(val) else g[key] = string.gsub(val, '"', '') end
+        end
+        if g and g.score and type(g.score) == "number" and g.score > 0 then
+            return g
+        end
+        return nil
+    end)
+    if ok and val and type(val) == "table" and val.score then
+        return val
+    end
+    return nil
 end
 
 function SaveSystem.loadGhost()

@@ -1536,6 +1536,66 @@ function Data.getMetaUnlockForAchievement(achId)
 end
 
 -- ============================================================================
+-- Phase A: 支线任务系统 - 每局随机生成的动态任务
+-- ============================================================================
+Data.QUESTS_SIDE = {
+    { id = "kill_drones",   name = "无人机清扫",   desc = "击杀 20 个无人机",
+      type = "kill",  target = 20, targetKind = "drone",
+      reward = { blueprint = 3, metaXp = 10 }, difficulty = "easy" },
+    { id = "kill_any_30",   name = "歼灭作战",     desc = "击杀 30 个任意敌人",
+      type = "kill",  target = 30, targetKind = "any",
+      reward = { metal = 50, metaXp = 8 },       difficulty = "easy" },
+    { id = "kill_elite_5", name = "精英猎杀",     desc = "击杀 5 个精英敌人",
+      type = "kill",  target = 5,  targetKind = "elite",
+      reward = { blueprint = 5, metaXp = 20 },   difficulty = "hard" },
+    { id = "collect_metal_100", name = "金属收集者", desc = "收集 100 单位金属",
+      type = "collect", target = 100, resource = "metal",
+      reward = { blueprint = 2, metaXp = 10 },   difficulty = "easy" },
+    { id = "collect_energy_60", name = "能量回收",   desc = "收集 60 单位能量",
+      type = "collect", target = 60, resource = "energy",
+      reward = { blueprint = 2, metaXp = 10 },   difficulty = "easy" },
+    { id = "survive_day_3", name = "坚守三天",     desc = "进入第 3 天",
+      type = "survive_day", target = 3,
+      reward = { blueprint = 4, metaXp = 15 },   difficulty = "medium" },
+    { id = "no_shield_loss_60s", name = "完美防御", desc = "连续 60 秒护盾不掉",
+      type = "survive_time", target = 60,
+      reward = { blueprint = 5, metaXp = 25 },   difficulty = "hard" },
+    { id = "boss_rush",    name = "Boss 速杀",   desc = "Boss 出现后 45 秒内击败",
+      type = "boss_kill_time", target = 45,
+      reward = { blueprint = 8, metaXp = 40 },   difficulty = "hard" },
+    { id = "build_relay_3", name = "防御网络",    desc = "建造 3 座中继站",
+      type = "build",   target = 3, buildKind = "relay",
+      reward = { blueprint = 4, metaXp = 15 },   difficulty = "medium" },
+    { id = "combo_S",      name = "连击大师",    desc = "达成 S 级连击",
+      type = "combo_rank", targetRank = "S",
+      reward = { blueprint = 4, metaXp = 15 },   difficulty = "medium" },
+}
+
+function Data.getRandomQuests(count)
+    count = count or 3
+    local pool = {}
+    for _, q in ipairs(Data.QUESTS_SIDE) do table.insert(pool, q) end
+    for i = #pool, 2, -1 do
+        local j = math.random(1, i)
+        pool[i], pool[j] = pool[j], pool[i]
+    end
+    local result = {}
+    for i = 1, math.min(count, #pool) do
+        table.insert(result, {
+            id = pool[i].id, name = pool[i].name, desc = pool[i].desc,
+            progress = 0, target = pool[i].target, completed = false,
+            reward = pool[i].reward, type = pool[i].type,
+            targetKind = pool[i].targetKind, resource = pool[i].resource,
+            targetRank = pool[i].targetRank, buildKind = pool[i].buildKind,
+        })
+    end
+    return result
+end
+
+-- 精英敌人类型集合（用于 kill_elite 任务判断）
+Data.ELITE_ENEMY_KINDS = { guard = true, summoner = true, cruiser = true, phasePhaser = true, energyLeech = true }
+
+-- ============================================================================
 -- Phase 24: 每日挑战主题池
 -- ============================================================================
 Data.DAILY_THEMES = {

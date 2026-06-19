@@ -64,6 +64,9 @@ function Core.newGame(playerName, factionId, gameMode)
         chapterProgress = {},
         difficultyId = "standard",
         zoneId = "frontier",
+        -- Phase B: 当前区域
+        currentZoneId = "frontier",
+        currentZone = nil,
         -- P19.2: 元进度（永久升级累积经验/已解锁等级）
         meta = {
             xp = 0,
@@ -122,6 +125,21 @@ function Core.newGame(playerName, factionId, gameMode)
         bossesKilled = {},
         bossesSpawned = {},
         completedQuests = {},
+        -- P26: 支线任务状态
+        sideQuests = {
+            active = {},
+            noShieldTimer = 0,
+            bossAppearTime = nil,
+            _dirty = false,
+        },
+        -- Phase A: 对话框状态
+        dialogue = {
+            active = false,
+            npcId = nil,
+            lineIndex = 0,
+            currentLine = nil,
+            npcName = nil,
+        },
         relayStations = {},
         relayCount = 0,
         -- P14.2: 每周挑战
@@ -221,6 +239,10 @@ function Core.newGame(playerName, factionId, gameMode)
     Systems.initAchievements(state)
     Systems.resetCombo()
     state.bossNoHitFlag = true
+    if Data.getZone then
+        state.currentZone = Data.getZone(state.currentZoneId or "frontier")
+    end
+    Core.initializeSideQuests(state)
     Core.spawnInitial(state)
     Core.generateStars(state)
     Core.generateMysteries(state)
@@ -416,6 +438,8 @@ function Core.update(state, dt, inputState)
         if state.dayTimer >= state.dayLength then
             state.dayTimer = state.dayTimer - state.dayLength
             state.day = state.day + 1
+            -- Phase B: 根据天数切换区域
+            if Core.updateZoneByDay then Core.updateZoneByDay(state) end
             -- P14.2: 每周挑战 - day进度
             if state.weeklyChallenge and not state.weeklyChallenge.completed then
                 if state.weeklyChallenge.type == "day" then
@@ -584,6 +608,7 @@ function Core.update(state, dt, inputState)
 
     -- 任务检查
     World.checkQuests(state, Core)
+    Core.updateSideQuests(state, dt)
 
     -- Phase 6.4: 改进屏幕震动 - 正弦波噪声 + 方向性
     if state.shakeTime and state.shakeTime > 0 then
@@ -723,6 +748,24 @@ function Core.update(state, dt, inputState)
         state.seasonOver = true
         state.playerDied = true
         Core.addToast(state, S.get("hud_ship_crashed"), { 255, 58, 92 })
+    end
+end
+
+function Core.updateZoneByDay(state)
+    local newZoneId = "frontier"
+    if state.day >= 8 then
+        newZoneId = "core"
+    elseif state.day >= 5 then
+        newZoneId = "void"
+    elseif state.day >= 3 then
+        newZoneId = "forbidden"
+    end
+    if state.currentZoneId ~= newZoneId then
+        state.currentZoneId = newZoneId
+        state.currentZone = Data.getZone(newZoneId)
+        if Core.addToast then
+            Core.addToast(state, "进入区域: " .. (state.currentZone and state.currentZone.name or ""), { 150, 200, 255 })
+        end
     end
 end
 
@@ -1023,6 +1066,7 @@ end
 
 function Core.spawnBoss(state, bossId)
     EnemyAI.spawnBoss(state, Core, bossId)
+    if Core.onSideQuestBossAppear then Core.onSideQuestBossAppear(state) end
 end
 
 function Core.damagePlayer(state, rawDmg, srcX, srcY)
@@ -1031,7 +1075,11 @@ end
 
 function Core.onEnemyKilled(state, e)
     Core.incrementCombo(state)
+    Core.onSideQuestKill(state, e.kind)
     EnemyAI.onEnemyKilled(state, Core, e)
+    if e.bossId or e.kind == "boss" or e.isBoss then
+        if Core.onSideQuestBossKilled then Core.onSideQuestBossKilled(state) end
+    end
 end
 
 function Core.dropResources(state, x, y, metal, energy, blueprint, key)
@@ -1266,6 +1314,7 @@ function Core.incrementCombo(state)
             Core.shake(state, 1.2, 0.2)
         end
     end
+    Core.onSideQuestCombo(state, state.comboRank.rank)
 end
 
 -- ============================================================================
@@ -1568,6 +1617,159 @@ function Core.applyDailyTheme(state, theme)
     if m.comboDmgBonusMul then
         state._comboDmgBonusMul = m.comboDmgBonusMul
     end
+end
+
+-- ============================================================================
+-- P26: 支线任务系统
+-- ============================================================================
+function Core.initializeSideQuests(state)
+    if not state.sideQuests then state.sideQuests = { active = {}, noShieldTimer = 0, bossAppearTime = nil, _dirty = false } end
+    state.sideQuests.active = Data.getRandomQuests(3)
+    state.sideQuests.noShieldTimer = 0
+    state.sideQuests.bossAppearTime = nil
+    state.sideQuests._dirty = true
+end
+
+function Core.updateSideQuests(state, dt)
+    if not state.sideQuests or not state.sideQuests.active then return end
+    for _, q in ipairs(state.sideQuests.active) do
+        if q.completed then goto continue end
+        if q.type == "survive_day" then
+            if state.day > q.progress then q.progress = state.day; state.sideQuests._dirty = true end
+        elseif q.type == "survive_time" and q.id == "no_shield_loss_60s" then
+            state.sideQuests.noShieldTimer = state.sideQuests.noShieldTimer + dt
+            local secs = math.floor(state.sideQuests.noShieldTimer)
+            if secs > q.progress then q.progress = secs; state.sideQuests._dirty = true end
+        end
+        if not q.completed and q.target and q.progress >= q.target then
+            Core.completeSideQuest(state, q)
+        end
+        ::continue::
+    end
+end
+
+function Core.onSideQuestKill(state, enemyKind)
+    if not state.sideQuests or not state.sideQuests.active then return end
+    for _, q in ipairs(state.sideQuests.active) do
+        if q.type == "kill" and not q.completed then
+            local match = false
+            if q.targetKind == "any" then match = true
+            elseif q.targetKind == "drone" and enemyKind == "drone" then match = true
+            elseif q.targetKind == "elite" and Data.ELITE_ENEMY_KINDS[enemyKind] then match = true
+            elseif q.targetKind == enemyKind then match = true end
+            if match then
+                q.progress = q.progress + 1
+                state.sideQuests._dirty = true
+                if q.target and q.progress >= q.target then Core.completeSideQuest(state, q) end
+            end
+        end
+    end
+end
+
+function Core.onSideQuestResource(state, resourceKind, amount)
+    if not state.sideQuests or not state.sideQuests.active then return end
+    for _, q in ipairs(state.sideQuests.active) do
+        if q.type == "collect" and not q.completed and q.resource == resourceKind then
+            q.progress = q.progress + (amount or 1)
+            state.sideQuests._dirty = true
+            if q.target and q.progress >= q.target then Core.completeSideQuest(state, q) end
+        end
+    end
+end
+
+function Core.onSideQuestBuild(state, buildKind)
+    if not state.sideQuests or not state.sideQuests.active then return end
+    for _, q in ipairs(state.sideQuests.active) do
+        if q.type == "build" and not q.completed and q.buildKind == buildKind then
+            q.progress = q.progress + 1
+            state.sideQuests._dirty = true
+            if q.target and q.progress >= q.target then Core.completeSideQuest(state, q) end
+        end
+    end
+end
+
+function Core.onSideQuestCombo(state, rank)
+    if not state.sideQuests or not state.sideQuests.active then return end
+    local rankOrder = { C = 1, B = 2, A = 3, S = 4, SS = 5, SSS = 6 }
+    for _, q in ipairs(state.sideQuests.active) do
+        if q.type == "combo_rank" and not q.completed then
+            local need = rankOrder[q.targetRank] or 1
+            local cur = rankOrder[rank] or 1
+            if cur >= need then
+                q.progress = need or q.target or 1
+                Core.completeSideQuest(state, q)
+            end
+        end
+    end
+end
+
+function Core.onSideQuestShieldLost(state)
+    if not state.sideQuests then return end
+    state.sideQuests.noShieldTimer = 0
+    for _, q in ipairs(state.sideQuests.active) do
+        if q.id == "no_shield_loss_60s" and not q.completed then q.progress = 0 end
+    end
+end
+
+function Core.onSideQuestBossAppear(state)
+    if not state.sideQuests then return end
+    state.sideQuests.bossAppearTime = state.dayTimer or 0
+end
+
+function Core.onSideQuestBossKilled(state)
+    if not state.sideQuests or not state.sideQuests.bossAppearTime then return end
+    local elapsed = (state.dayTimer or 0) - state.sideQuests.bossAppearTime
+    for _, q in ipairs(state.sideQuests.active) do
+        if q.type == "boss_kill_time" and not q.completed and q.target and elapsed <= q.target then
+            q.progress = q.target
+            Core.completeSideQuest(state, q)
+        end
+    end
+end
+
+function Core.completeSideQuest(state, quest)
+    if quest.completed then return end
+    quest.completed = true
+    local r = quest.reward or {}
+    if r.blueprint and state.resources then
+        state.resources.blueprint = (state.resources.blueprint or 0) + r.blueprint
+    end
+    if r.metal and state.resources then
+        state.resources.metal = (state.resources.metal or 0) + r.metal
+    end
+    if r.metaXp then
+        state.earnedMetaXp = (state.earnedMetaXp or 0) + r.metaXp
+    end
+    Core.addToast(state, "任务完成: " .. quest.name .. " +" .. (r.blueprint or 0) .. " 蓝图", { 100, 255, 150 })
+    Core.shake(state, 2, 0.2)
+    Core.spawnParticles(state, state.player.x, state.player.y, { 100, 255, 150 }, 25)
+end
+
+function Core.triggerDialogue(state, npcId)
+    local npc = Data.NPC_DIALOGUE[npcId]
+    if not npc then return end
+    state.dialogue = state.dialogue or { active = false }
+    state.dialogue.active = true
+    state.dialogue.npcId = npcId
+    state.dialogue.lineIndex = 1
+    state.dialogue.currentLine = npc.lines[1]
+    state.dialogue.npcName = npc.name
+end
+
+function Core.advanceDialogue(state)
+    if not state.dialogue or not state.dialogue.active then return end
+    local npc = Data.NPC_DIALOGUE[state.dialogue.npcId]
+    if not npc then state.dialogue.active = false; return end
+    state.dialogue.lineIndex = state.dialogue.lineIndex + 1
+    if state.dialogue.lineIndex > #npc.lines then
+        state.dialogue.active = false
+    else
+        state.dialogue.currentLine = npc.lines[state.dialogue.lineIndex]
+    end
+end
+
+function Core.isDialogueActive(state)
+    return state.dialogue and state.dialogue.active
 end
 
 return Core
