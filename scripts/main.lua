@@ -158,6 +158,9 @@ function Start()
         end
     end)
 
+    -- Phase 26: 把已加载的 Mod 应用到全局 Data（热加载第一步）
+    if Data.applyActiveMods then Data.applyActiveMods() end
+
     -- P8.1: 加载本地存档
     local loadedData = SaveSystem.load()
     if loadedData then
@@ -878,6 +881,8 @@ end
 -- ============================================================================
 function StartGame()
     GameAudio.playClick()
+    -- Phase 26: 每局开始前应用最新启用的 Mod（热加载支持）
+    if Data.applyActiveMods then Data.applyActiveMods() end
     -- P8.2: 安全检查 - 确保选中的皮肤已解锁
     local skin = Systems.SHIP_SKINS[selectedSkinIdx]
     if skin and skin.unlock ~= "default" then
@@ -910,11 +915,13 @@ function StartGame()
     end
 
     -- P18/P19: 应用难度与战役章节
+    -- 注意：applyDifficulty 依赖 stats.maxHpBonus/dmgBonus（由 applyMetaUpgrades 设置），
+    -- 因此必须在 applyMetaUpgrades 之后调用
     local difficultyIds = { "rookie", "standard", "hard", "void" }
     gameState.difficultyId = difficultyIds[selectedDifficultyIdx] or "standard"
     gameState.campaignId = "ch" .. selectedChapterIdx
     if Core.applyDifficulty then Core.applyDifficulty(gameState) end
-    if Core.applyMetaUpgrades then Core.applyMetaUpgrades(gameState) end
+    -- 移除重复的 applyMetaUpgrades 调用：hpMax 由 applyDifficulty 统一计算
 
     -- Phase 24: 应用每日主题（影响敌人/资源/连击等）
     local themeSeed = tonumber(os.date("%y%m%d")) or 1

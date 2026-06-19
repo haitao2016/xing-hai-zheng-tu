@@ -310,7 +310,7 @@ function Core.update(state, dt, inputState)
     Core.updateSkills(state, scaledDt)
     -- P20: 能量回复（15/s，乘以元进度加成）
     if state.player.energy and state.player.energyMax then
-        local regenRate = 15 * (state.stats.energyRegenBonus or 1)
+        local regenRate = 12 * (state.stats.energyRegenBonus or 1)
         state.player.energy = math.min(state.player.energyMax, state.player.energy + regenRate * dt)
     end
     -- 连击衰减
@@ -1098,9 +1098,14 @@ function Core.applyDifficulty(state)
         playerDmg = m.playerDmg or 1,
         playerHp = m.playerHp or 1,
     }
-    state.stats.dmgMul = state.stats.dmgMul * (m.playerDmg or 1)
-    state.player.hpMax = math.floor(state.player.hpMax * (m.playerHp or 1))
+    -- 以难度倍率 + 元进度 hpBonus 联合计算 HP
+    local baseHp = 100
+    local metaHpBonus = state.stats and state.stats.maxHpBonus or 1
+    state.player.hpMax = math.floor(baseHp * metaHpBonus * (m.playerHp or 1))
     state.player.hp = state.player.hpMax
+    -- 难度对玩家伤害倍率（在 stats.dmgMul 基础上叠加）
+    local metaDmgBonus = state.stats and state.stats.dmgBonus or 1
+    state.stats.dmgMul = metaDmgBonus * (m.playerDmg or 1)
 end
 
 function Core.applyMetaUpgrades(state)
@@ -1118,13 +1123,8 @@ function Core.applyMetaUpgrades(state)
             if up and up.apply then up.apply(state, lvl) end
         end
     end
-    -- 根据最大生命加成更新玩家 hpMax
-    if state.stats.maxHpBonus and state.stats.maxHpBonus ~= 1 then
-        local baseHp = 100  -- 默认基础生命
-        state.player.hpMax = math.floor(baseHp * state.stats.maxHpBonus)
-        state.player.hp = state.player.hpMax
-    end
-    -- 起始护盾
+    -- 不再在此处直接修改 player.hpMax（由 applyDifficulty 统一计算）
+    -- 起始护盾仍由元进度设置
     if state.stats.startingShields and state.stats.startingShields > 0 then
         state.player.shield = state.stats.startingShields * 20
         state.player.shieldMax = math.max(state.player.shieldMax or 0, state.player.shield)
@@ -1252,6 +1252,19 @@ function Core.incrementCombo(state)
     Core.recomputeComboRank(state)
     if oldRank ~= state.comboRank.rank then
         Core.addToast(state, "连击等级提升：" .. state.comboRank.rank, state.comboRank.color)
+        -- Phase 26: SSS 等级触发屏幕特效（粒子爆发 + 屏幕震动 + 闪屏）
+        if state.comboRank.rank == "SSS" then
+            Core.spawnExplosion(state, state.player.x, state.player.y, state.comboRank.color, 60, 420)
+            Core.spawnParticles(state, state.player.x, state.player.y, { 255, 255, 255 }, 30)
+            Core.shake(state, 3, 0.4)
+            Core.screenFlash(state, state.comboRank.color, 0.25, 0.3)
+        elseif state.comboRank.rank == "SS" then
+            Core.spawnExplosion(state, state.player.x, state.player.y, state.comboRank.color, 40, 350)
+            Core.shake(state, 2, 0.3)
+        elseif state.comboRank.rank == "S" then
+            Core.spawnParticles(state, state.player.x, state.player.y, state.comboRank.color, 20)
+            Core.shake(state, 1.2, 0.2)
+        end
     end
 end
 

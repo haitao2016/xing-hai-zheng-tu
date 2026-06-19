@@ -998,9 +998,9 @@ Data.DIFFICULTY_LEVELS = {
         desc = "舒缓的星海之旅，专注于探索与故事。",
         descEn = "A relaxed journey. Focus on exploration and story.",
         multipliers = {
-            enemyHp = 0.7, enemyDmg = 0.6, enemySpeed = 0.85,
-            spawnRate = 0.75, resourceGain = 1.3, blueprintGain = 1.2,
-            playerDmg = 1.15, playerHp = 1.2,
+            enemyHp = 0.65, enemyDmg = 0.55, enemySpeed = 0.85,
+            spawnRate = 0.7, resourceGain = 1.4, blueprintGain = 1.25,
+            playerDmg = 1.2, playerHp = 1.25,
         },
         unlockFlag = nil,
         metaXpGain = 1.0,
@@ -1028,8 +1028,8 @@ Data.DIFFICULTY_LEVELS = {
         desc = "敌舰更强更密集，资源更珍贵。献给追求挑战的指挥官。",
         descEn = "Stronger enemies, scarcer resources. For commanders seeking challenge.",
         multipliers = {
-            enemyHp = 1.35, enemyDmg = 1.25, enemySpeed = 1.1,
-            spawnRate = 1.2, resourceGain = 0.85, blueprintGain = 0.8,
+            enemyHp = 1.3, enemyDmg = 1.2, enemySpeed = 1.08,
+            spawnRate = 1.15, resourceGain = 0.85, blueprintGain = 0.8,
             playerDmg = 1.05, playerHp = 0.9,
         },
         unlockFlag = { completedCh1 = true },
@@ -1043,8 +1043,8 @@ Data.DIFFICULTY_LEVELS = {
         desc = "只有精英中的精英才能生还。一击失误，即是毁灭。",
         descEn = "Only the elite survive. One mistake, one death.",
         multipliers = {
-            enemyHp = 1.65, enemyDmg = 1.5, enemySpeed = 1.18,
-            spawnRate = 1.35, resourceGain = 0.7, blueprintGain = 0.65,
+            enemyHp = 1.5, enemyDmg = 1.35, enemySpeed = 1.15,
+            spawnRate = 1.25, resourceGain = 0.7, blueprintGain = 0.65,
             playerDmg = 1.1, playerHp = 0.85,
         },
         unlockFlag = { completedCh2 = true, hardClear = true },
@@ -1156,9 +1156,9 @@ Data.ACTIVE_SKILLS = {
         id = "skill_dash",
         name = "量子冲刺",
         key = "1",
-        energyCost = 30,
-        cooldown = 2.0,
-        desc = "向当前移动方向瞬移200距离，获得0.8秒无敌。",
+        energyCost = 25,
+        cooldown = 1.5,
+        desc = "向当前移动方向瞬移 200 距离，获得 0.8 秒无敌。",
         color = { 120, 220, 255 },
         icon = "➤",
     },
@@ -1166,21 +1166,21 @@ Data.ACTIVE_SKILLS = {
         id = "skill_shock",
         name = "冲击波",
         key = "2",
-        energyCost = 50,
-        cooldown = 4.0,
-        desc = "释放环形能量波，对范围内敌人造成60伤害并击退。",
+        energyCost = 45,
+        cooldown = 3.5,
+        desc = "释放环形能量波，240 范围内敌人受到 70 伤害并击退。",
         color = { 255, 200, 100 },
         icon = "◎",
-        range = 220,
-        damage = 60,
+        range = 240,
+        damage = 70,
     },
     {
         id = "skill_slow",
         name = "时间减速",
         key = "3",
-        energyCost = 70,
-        cooldown = 8.0,
-        desc = "扭曲局部时间，所有敌人减速50%，持续4秒。",
+        energyCost = 60,
+        cooldown = 6.0,
+        desc = "扭曲局部时间，所有敌人减速 50%，持续 4 秒。",
         color = { 200, 150, 255 },
         icon = "⏳",
         duration = 4.0,
@@ -1190,25 +1190,25 @@ Data.ACTIVE_SKILLS = {
         id = "skill_shield",
         name = "护盾充能",
         key = "4",
-        energyCost = 40,
-        cooldown = 6.0,
-        desc = "立即回复25最大生命，获得1层临时护盾持续3秒。",
+        energyCost = 35,
+        cooldown = 5.0,
+        desc = "立即回复 30 最大生命，获得临时护盾。",
         color = { 120, 255, 160 },
         icon = "🛡",
-        healAmount = 25,
+        healAmount = 30,
         shieldDuration = 3.0,
     },
     {
         id = "skill_strike",
         name = "轨道打击",
         key = "5",
-        energyCost = 80,
-        cooldown = 12.0,
-        desc = "呼叫轨道炮，在鼠标位置落下毁灭性一击，造成200范围伤害。",
+        energyCost = 70,
+        cooldown = 10.0,
+        desc = "呼叫轨道炮，在鼠标位置落下毁灭性一击，造成 220 范围伤害。",
         color = { 255, 100, 100 },
         icon = "☄",
-        range = 180,
-        damage = 200,
+        range = 200,
+        damage = 220,
     },
 }
 
@@ -1608,10 +1608,13 @@ end
 -- ============================================================================
 -- Phase 26: Mod 注册表与加载器
 -- ============================================================================
+-- P26: Mod 注册与热加载系统（启停无需重启游戏）
+-- ============================================================================
 Data.MOD_REGISTRY = {
-    loaded = {},
-    enabled = {},
+    loaded = {},           -- id -> mod table
+    enabled = {},          -- id -> boolean
     totalCount = 0,
+    applied = {},          -- id -> { enemyKeys = {}, bossKeys = {}, relicIds = {}, techIds = {}, diffIds = {}, themeIds = {} }
 }
 
 Data.MOD_SCHEMA = {
@@ -1637,6 +1640,7 @@ function Data.validateMod(mod)
     return true
 end
 
+-- 核心注册函数：只验证和存储，不直接修改全局 Data（由 applyActiveMods 动态应用）
 function Data.registerMod(mod)
     local ok, err = Data.validateMod(mod)
     if not ok then return false, err end
@@ -1645,38 +1649,94 @@ function Data.registerMod(mod)
     end
     Data.MOD_REGISTRY.loaded[mod.id] = mod
     Data.MOD_REGISTRY.enabled[mod.id] = mod.enabled ~= false
+    Data.MOD_REGISTRY.applied[mod.id] = nil  -- 应用标记在 applyActiveMods 时填充
     Data.MOD_REGISTRY.totalCount = Data.MOD_REGISTRY.totalCount + 1
-    if mod.enemies then
-        for key, def in pairs(mod.enemies) do
-            Data.ENEMY_TYPES[key] = def
-        end
-    end
-    if mod.bosses then
-        for key, def in pairs(mod.bosses) do
-            Data.BOSS_DEFS[key] = def
-        end
-    end
-    if mod.relics then
-        for _, def in ipairs(mod.relics) do
-            table.insert(Data.RELICS, def)
-        end
-    end
-    if mod.tech then
-        for _, def in ipairs(mod.tech) do
-            table.insert(Data.TECH_TREE, def)
-        end
-    end
-    if mod.difficulty then
-        for _, def in ipairs(mod.difficulty) do
-            table.insert(Data.DIFFICULTY_LEVELS, def)
-        end
-    end
-    if mod.themes then
-        for _, def in ipairs(mod.themes) do
-            table.insert(Data.DAILY_THEMES, def)
-        end
-    end
     return true
+end
+
+-- 应用所有已启用的 Mod（在 Core.newGame 之后调用，支持热更新）
+function Data.applyActiveMods()
+    -- 先清理之前应用的所有 Mod 内容
+    for modId, applied in pairs(Data.MOD_REGISTRY.applied) do
+        if applied.enemyKeys then
+            for _, k in ipairs(applied.enemyKeys) do Data.ENEMY_TYPES[k] = nil end
+        end
+        if applied.bossKeys then
+            for _, k in ipairs(applied.bossKeys) do Data.BOSS_DEFS[k] = nil end
+        end
+        if applied.relicIds then
+            for _, rid in ipairs(applied.relicIds) do
+                for i = #Data.RELICS, 1, -1 do
+                    if Data.RELICS[i].id == rid then table.remove(Data.RELICS, i); break end
+                end
+            end
+        end
+        if applied.techIds then
+            for _, tid in ipairs(applied.techIds) do
+                for i = #Data.TECH_TREE, 1, -1 do
+                    if Data.TECH_TREE[i].id == tid then table.remove(Data.TECH_TREE, i); break end
+                end
+            end
+        end
+        if applied.diffIds then
+            for i = #Data.DIFFICULTY_LEVELS, 1, -1 do
+                for _, did in ipairs(applied.diffIds) do
+                    if Data.DIFFICULTY_LEVELS[i].id == did then table.remove(Data.DIFFICULTY_LEVELS, i); break end
+                end
+            end
+        end
+        if applied.themeIds then
+            for i = #Data.DAILY_THEMES, 1, -1 do
+                for _, tid in ipairs(applied.themeIds) do
+                    if Data.DAILY_THEMES[i].id == tid then table.remove(Data.DAILY_THEMES, i); break end
+                end
+            end
+        end
+        Data.MOD_REGISTRY.applied[modId] = nil
+    end
+    -- 重新应用所有启用的 Mod
+    for modId, mod in pairs(Data.MOD_REGISTRY.loaded) do
+        if Data.MOD_REGISTRY.enabled[modId] then
+            local applied = { enemyKeys = {}, bossKeys = {}, relicIds = {}, techIds = {}, diffIds = {}, themeIds = {} }
+            if mod.enemies then
+                for key, def in pairs(mod.enemies) do
+                    Data.ENEMY_TYPES[key] = def
+                    table.insert(applied.enemyKeys, key)
+                end
+            end
+            if mod.bosses then
+                for key, def in pairs(mod.bosses) do
+                    Data.BOSS_DEFS[key] = def
+                    table.insert(applied.bossKeys, key)
+                end
+            end
+            if mod.relics then
+                for _, def in ipairs(mod.relics) do
+                    table.insert(Data.RELICS, def)
+                    table.insert(applied.relicIds, def.id)
+                end
+            end
+            if mod.tech then
+                for _, def in ipairs(mod.tech) do
+                    table.insert(Data.TECH_TREE, def)
+                    table.insert(applied.techIds, def.id)
+                end
+            end
+            if mod.difficulty then
+                for _, def in ipairs(mod.difficulty) do
+                    table.insert(Data.DIFFICULTY_LEVELS, def)
+                    table.insert(applied.diffIds, def.id)
+                end
+            end
+            if mod.themes then
+                for _, def in ipairs(mod.themes) do
+                    table.insert(Data.DAILY_THEMES, def)
+                    table.insert(applied.themeIds, def.id)
+                end
+            end
+            Data.MOD_REGISTRY.applied[modId] = applied
+        end
+    end
 end
 
 function Data.listMods()
@@ -1698,6 +1758,8 @@ end
 function Data.toggleMod(modId)
     if Data.MOD_REGISTRY.loaded[modId] then
         Data.MOD_REGISTRY.enabled[modId] = not (Data.MOD_REGISTRY.enabled[modId] or false)
+        -- 热加载：立即重新应用所有 Mod 内容（启停效果立刻生效，无需重启）
+        Data.applyActiveMods()
         return Data.MOD_REGISTRY.enabled[modId]
     end
     return false
